@@ -122,8 +122,8 @@ export function TradeWiseDashboard() {
   const form = useForm<z.infer<typeof tradeSchema>>({
     resolver: zodResolver(tradeSchema),
     defaultValues: {
-      amount: undefined,
-      returnPercentage: undefined,
+      amount: "" as any,
+      returnPercentage: "" as any,
     },
   });
 
@@ -545,5 +545,3 @@ export function TradeWiseDashboard() {
     </div>
   );
 }
-
-    
