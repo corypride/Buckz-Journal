@@ -56,12 +56,14 @@ import {
   RefreshCw,
   Sparkles,
   TrendingUp,
-  TrendingDown,
   CirclePercent,
   DollarSign,
   Loader2,
   BrainCircuit,
   AlertTriangle,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react";
 
 type Trade = {
@@ -81,10 +83,10 @@ const tradeSchema = z.object({
     .positive({ message: "Amount must be positive" }),
   returnPercentage: z.coerce
     .number({ invalid_type_error: "Must be a number" })
-    .positive({ message: "Return must be positive" }),
+    .gte(0, { message: "Return must be non-negative" }),
 });
 
-const INITIAL_PORTFOLIO = 1000.0;
+const DEFAULT_INITIAL_PORTFOLIO = 1000.0;
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("en-US", {
@@ -101,7 +103,15 @@ const formatPercent = (value: number) =>
 
 export function TradeWiseDashboard() {
   const [trades, setTrades] = useState<Trade[]>([]);
-  const [portfolioValue, setPortfolioValue] = useState(INITIAL_PORTFOLIO);
+  const [initialPortfolio, setInitialPortfolio] = useState(DEFAULT_INITIAL_PORTFOLIO);
+  const [isEditingInitialPortfolio, setIsEditingInitialPortfolio] = useState(false);
+  const [editingInitialPortfolioValue, setEditingInitialPortfolioValue] = useState(String(DEFAULT_INITIAL_PORTFOLIO));
+
+  const portfolioValue = useMemo(() => {
+    if (trades.length === 0) return initialPortfolio;
+    return trades[0].portfolioAfter;
+  }, [trades, initialPortfolio]);
+  
   const [riskLevel, setRiskLevel] = useState<RiskLevel>("medium");
   const [suggestion, setSuggestion] =
     useState<SuggestTradeAmountOutput | null>(null);
@@ -130,11 +140,12 @@ export function TradeWiseDashboard() {
   ) => {
     startTransition(() => {
       const { amount, returnPercentage } = values;
+      const currentPortfolio = portfolioValue;
       const profit = amount * (returnPercentage / 100);
       const newPortfolioValue =
         outcome === "win"
-          ? portfolioValue + profit
-          : portfolioValue - amount;
+          ? currentPortfolio + profit
+          : currentPortfolio - amount;
 
       const newTrade: Trade = {
         id: trades.length + 1,
@@ -146,16 +157,40 @@ export function TradeWiseDashboard() {
       };
 
       setTrades((prev) => [newTrade, ...prev]);
-      setPortfolioValue(newPortfolioValue);
       form.reset();
       setSuggestion(null);
     });
   };
+  
+  const handleSaveInitialPortfolio = () => {
+    const newInitial = parseFloat(editingInitialPortfolioValue);
+    if (!isNaN(newInitial) && newInitial > 0) {
+      if (trades.length > 0) {
+          toast({
+              variant: "destructive",
+              title: "Cannot Change Initial Portfolio",
+              description: "Please reset the session to change the initial portfolio value.",
+          });
+      } else {
+        setInitialPortfolio(newInitial);
+        setIsEditingInitialPortfolio(false);
+      }
+    } else {
+      toast({
+          variant: "destructive",
+          title: "Invalid Amount",
+          description: "Please enter a valid positive number for the initial portfolio.",
+      });
+    }
+  };
+
 
   const handleReset = () => {
     startTransition(() => {
       setTrades([]);
-      setPortfolioValue(INITIAL_PORTFOLIO);
+      setInitialPortfolio(DEFAULT_INITIAL_PORTFOLIO);
+      setEditingInitialPortfolioValue(String(DEFAULT_INITIAL_PORTFOLIO));
+      setIsEditingInitialPortfolio(false);
       setSuggestion(null);
       form.reset();
     });
@@ -226,81 +261,6 @@ export function TradeWiseDashboard() {
       <main className="flex-1 p-4 md:p-6 lg:p-8">
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           <div className="lg:col-span-2 flex flex-col gap-6">
-            <Card className="shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <DollarSign className="text-primary" />
-                  New Trade
-                </CardTitle>
-                <CardDescription>
-                  Enter trade details and log the outcome.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Form {...form}>
-                  <form className="space-y-6">
-                    <FormField
-                      control={form.control}
-                      name="amount"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Trade Amount ($)</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              placeholder="e.g., 100"
-                              {...field}
-                              className="text-base"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="returnPercentage"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Predicted Return (%)</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              placeholder="e.g., 85"
-                              {...field}
-                              className="text-base"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </form>
-                </Form>
-              </CardContent>
-              <CardFooter className="flex gap-4">
-                <Button
-                  onClick={form.handleSubmit((data) =>
-                    handleAddTrade(data, "win")
-                  )}
-                  className="flex-1"
-                  disabled={isPending}
-                >
-                  <ArrowUpRight className="mr-2 h-4 w-4" /> Log Win
-                </Button>
-                <Button
-                  onClick={form.handleSubmit((data) =>
-                    handleAddTrade(data, "loss")
-                  )}
-                  variant="destructive"
-                  className="flex-1"
-                  disabled={isPending}
-                >
-                  <ArrowDownLeft className="mr-2 h-4 w-4" /> Log Loss
-                </Button>
-              </CardFooter>
-            </Card>
-
             <Card className="shadow-lg">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -388,7 +348,32 @@ export function TradeWiseDashboard() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{formatCurrency(portfolioValue)}</div>
-                        <p className="text-xs text-muted-foreground">Initial: {formatCurrency(INITIAL_PORTFOLIO)}</p>
+                        <div className="text-xs text-muted-foreground">
+                          Initial: {isEditingInitialPortfolio ? (
+                            <div className="flex items-center gap-1 mt-1">
+                              <Input 
+                                type="number" 
+                                value={editingInitialPortfolioValue}
+                                onChange={(e) => setEditingInitialPortfolioValue(e.target.value)}
+                                className="h-6 text-xs w-24"
+                                onKeyDown={(e) => e.key === 'Enter' && handleSaveInitialPortfolio()}
+                              />
+                              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleSaveInitialPortfolio} disabled={trades.length > 0}>
+                                <Check className="h-4 w-4"/>
+                              </Button>
+                               <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => { setIsEditingInitialPortfolio(false); setEditingInitialPortfolioValue(String(initialPortfolio))}}>
+                                <X className="h-4 w-4"/>
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="flex items-center gap-1">
+                              {formatCurrency(initialPortfolio)}
+                              <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => setIsEditingInitialPortfolio(true)} disabled={trades.length > 0}>
+                                <Pencil className="h-3 w-3"/>
+                              </Button>
+                            </span>
+                          )}
+                        </div>
                     </CardContent>
                 </Card>
                 <Card>
@@ -417,19 +402,88 @@ export function TradeWiseDashboard() {
               <CardHeader>
                 <CardTitle>Trade Log</CardTitle>
                 <CardDescription>
-                  History of trades in this session.
+                  History of trades in this session. Add new trades below.
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex-1 flex flex-col min-h-0">
-                <ScrollArea className="flex-1">
+                 <Form {...form}>
                   <div className="pr-4">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="w-[80px]">Trade</TableHead>
+                          <TableHead className="w-[120px]">Amount ($)</TableHead>
+                          <TableHead className="w-[140px]">Return (%)</TableHead>
+                          <TableHead className="w-[180px]">Action</TableHead>
                           <TableHead>Outcome</TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
                           <TableHead className="text-right">P/L</TableHead>
+                          <TableHead className="text-right">Portfolio</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        <TableRow>
+                            <TableCell>
+                                <FormField
+                                  control={form.control}
+                                  name="amount"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormControl>
+                                        <Input type="number" placeholder="e.g., 100" {...field} className="text-sm" />
+                                      </FormControl>
+                                      <FormMessage className="text-xs"/>
+                                    </FormItem>
+                                  )}
+                                />
+                            </TableCell>
+                            <TableCell>
+                                <FormField
+                                  control={form.control}
+                                  name="returnPercentage"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormControl>
+                                        <Input type="number" placeholder="e.g., 85" {...field} className="text-sm" />
+                                      </FormControl>
+                                      <FormMessage className="text-xs"/>
+                                    </FormItem>
+                                  )}
+                                />
+                            </TableCell>
+                            <TableCell colSpan={4}>
+                                <div className="flex gap-2">
+                                    <Button
+                                      onClick={form.handleSubmit((data) => handleAddTrade(data, "win"))}
+                                      size="sm"
+                                      disabled={isPending}
+                                      className="flex-1"
+                                    >
+                                      <ArrowUpRight className="mr-2 h-4 w-4" /> Log Win
+                                    </Button>
+                                    <Button
+                                      onClick={form.handleSubmit((data) => handleAddTrade(data, "loss"))}
+                                      size="sm"
+                                      variant="destructive"
+                                      disabled={isPending}
+                                      className="flex-1"
+                                    >
+                                      <ArrowDownLeft className="mr-2 h-4 w-4" /> Log Loss
+                                    </Button>
+                                </div>
+                            </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </Form>
+                <ScrollArea className="flex-1 mt-4">
+                  <div className="pr-4">
+                    <Table>
+                       <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[120px]">Trade</TableHead>
+                          <TableHead className="w-[140px]">Amount</TableHead>
+                           <TableHead className="w-[180px]">Outcome</TableHead>
+                          <TableHead>P/L</TableHead>
                           <TableHead className="text-right">Portfolio</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -439,6 +493,9 @@ export function TradeWiseDashboard() {
                             <TableRow key={trade.id}>
                               <TableCell className="font-medium">
                                 #{trade.id}
+                              </TableCell>
+                              <TableCell className="text-left">
+                                {formatCurrency(trade.amount)}
                               </TableCell>
                               <TableCell>
                                 {trade.outcome === "win" ? (
@@ -451,11 +508,9 @@ export function TradeWiseDashboard() {
                                   </span>
                                 )}
                               </TableCell>
-                              <TableCell className="text-right">
-                                {formatCurrency(trade.amount)}
-                              </TableCell>
+                              
                               <TableCell
-                                className={`text-right font-semibold ${
+                                className={`text-left font-semibold ${
                                   trade.profit > 0
                                     ? "text-primary"
                                     : "text-destructive"
@@ -490,3 +545,5 @@ export function TradeWiseDashboard() {
     </div>
   );
 }
+
+    
