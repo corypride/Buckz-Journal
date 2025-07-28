@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useTransition } from "react";
@@ -45,6 +46,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
+import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Scale,
   ArrowUpRight,
@@ -57,6 +66,7 @@ import {
   Check,
   X,
   Target,
+  Trophy,
 } from "lucide-react";
 
 type Trade = {
@@ -79,6 +89,8 @@ const tradeSchema = z.object({
 
 const DEFAULT_INITIAL_PORTFOLIO = 1000.0;
 const DEFAULT_SESSION_GOAL = 10;
+const DEFAULT_PROFIT_GOAL = 100;
+const DEFAULT_PROFIT_GOAL_TYPE = "dollar";
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("en-US", {
@@ -103,6 +115,11 @@ export function TradeWiseDashboard() {
   const [isEditingSessionGoal, setIsEditingSessionGoal] = useState(false);
   const [editingSessionGoalValue, setEditingSessionGoalValue] = useState(String(DEFAULT_SESSION_GOAL));
 
+  const [profitGoal, setProfitGoal] = useState(DEFAULT_PROFIT_GOAL);
+  const [profitGoalType, setProfitGoalType] = useState<'dollar' | 'percent'>(DEFAULT_PROFIT_GOAL_TYPE);
+  const [isEditingProfitGoal, setIsEditingProfitGoal] = useState(false);
+  const [editingProfitGoalValue, setEditingProfitGoalValue] = useState(String(DEFAULT_PROFIT_GOAL));
+  const [editingProfitGoalType, setEditingProfitGoalType] = useState<'dollar' | 'percent'>(DEFAULT_PROFIT_GOAL_TYPE);
 
   const portfolioValue = useMemo(() => {
     if (trades.length === 0) return initialPortfolio;
@@ -128,6 +145,12 @@ export function TradeWiseDashboard() {
     return { wins, losses, winRate, totalProfit };
   }, [trades]);
 
+  const { profitGoalAmount, profitGoalProgress } = useMemo(() => {
+      const goalAmount = profitGoalType === 'dollar' ? profitGoal : initialPortfolio * (profitGoal / 100);
+      const progress = goalAmount > 0 ? (totalProfit / goalAmount) * 100 : 0;
+      return { profitGoalAmount: goalAmount, profitGoalProgress: progress };
+  }, [profitGoal, profitGoalType, initialPortfolio, totalProfit]);
+
   const handleAddTrade = (
     values: z.infer<typeof tradeSchema>,
     outcome: "win" | "loss"
@@ -151,6 +174,9 @@ export function TradeWiseDashboard() {
       };
 
       setTrades((prev) => [newTrade, ...prev]);
+      
+      // Don't reset form so user can re-use values
+      // form.reset({ amount: "" as any, returnPercentage: "" as any });
     });
   };
   
@@ -190,6 +216,21 @@ export function TradeWiseDashboard() {
     }
   };
 
+  const handleSaveProfitGoal = () => {
+    const newGoal = parseFloat(editingProfitGoalValue);
+    if (!isNaN(newGoal) && newGoal > 0) {
+        setProfitGoal(newGoal);
+        setProfitGoalType(editingProfitGoalType);
+        setIsEditingProfitGoal(false);
+    } else {
+        toast({
+            variant: "destructive",
+            title: "Invalid Goal",
+            description: "Please enter a valid positive number for the profit goal.",
+        });
+    }
+  };
+
 
   const handleReset = () => {
     startTransition(() => {
@@ -200,6 +241,11 @@ export function TradeWiseDashboard() {
       setSessionGoal(DEFAULT_SESSION_GOAL);
       setEditingSessionGoalValue(String(DEFAULT_SESSION_GOAL));
       setIsEditingSessionGoal(false);
+      setProfitGoal(DEFAULT_PROFIT_GOAL);
+      setProfitGoalType(DEFAULT_PROFIT_GOAL_TYPE);
+      setEditingProfitGoalValue(String(DEFAULT_PROFIT_GOAL));
+      setEditingProfitGoalType(DEFAULT_PROFIT_GOAL_TYPE);
+      setIsEditingProfitGoal(false);
       form.reset({ amount: "" as any, returnPercentage: "" as any });
     });
   };
@@ -241,7 +287,7 @@ export function TradeWiseDashboard() {
       <main className="flex-1 p-4 md:p-6 lg:p-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-3 flex flex-col gap-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Portfolio Value</CardTitle>
@@ -330,6 +376,57 @@ export function TradeWiseDashboard() {
                             )}
                         </div>
                         <p className="text-xs text-muted-foreground">Total trades in session</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Profit Goal</CardTitle>
+                        <Trophy className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        {isEditingProfitGoal ? (
+                             <div className="flex flex-col gap-2">
+                                 <div className="flex items-center gap-1">
+                                     <Input
+                                         type="number"
+                                         value={editingProfitGoalValue}
+                                         onChange={(e) => setEditingProfitGoalValue(e.target.value)}
+                                         className="h-8 text-xl w-24"
+                                         onKeyDown={(e) => e.key === 'Enter' && handleSaveProfitGoal()}
+                                     />
+                                     <Select value={editingProfitGoalType} onValueChange={(v) => setEditingProfitGoalType(v as any)}>
+                                         <SelectTrigger className="w-20 h-8">
+                                             <SelectValue />
+                                         </SelectTrigger>
+                                         <SelectContent>
+                                             <SelectItem value="dollar">$</SelectItem>
+                                             <SelectItem value="percent">%</SelectItem>
+                                         </SelectContent>
+                                     </Select>
+                                 </div>
+                                 <div className="flex items-center gap-1">
+                                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleSaveProfitGoal}>
+                                        <Check className="h-5 w-5" />
+                                    </Button>
+                                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => { setIsEditingProfitGoal(false); setEditingProfitGoalValue(String(profitGoal)); setEditingProfitGoalType(profitGoalType); }}>
+                                        <X className="h-5 w-5" />
+                                    </Button>
+                                 </div>
+                             </div>
+                        ) : (
+                            <>
+                                <div className="text-2xl font-bold flex items-center gap-2">
+                                    <span>{profitGoalType === 'dollar' ? formatCurrency(profitGoal) : `${profitGoal}%`}</span>
+                                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingProfitGoal(true)}>
+                                        <Pencil className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                                <div className="text-xs text-muted-foreground mt-1">
+                                    {formatCurrency(totalProfit)} / {formatCurrency(profitGoalAmount)}
+                                </div>
+                                <Progress value={profitGoalProgress} className="h-2 mt-2" />
+                            </>
+                        )}
                     </CardContent>
                 </Card>
             </div>
