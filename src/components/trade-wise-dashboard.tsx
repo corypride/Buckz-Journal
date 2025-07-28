@@ -67,6 +67,7 @@ import {
   X,
   Target,
   Trophy,
+  Activity,
 } from "lucide-react";
 
 type Trade = {
@@ -91,6 +92,7 @@ const DEFAULT_INITIAL_PORTFOLIO = 1000.0;
 const DEFAULT_SESSION_GOAL = 10;
 const DEFAULT_PROFIT_GOAL = 100;
 const DEFAULT_PROFIT_GOAL_TYPE = "dollar";
+const DEFAULT_TARGET_WIN_RATE = 70;
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("en-US", {
@@ -121,6 +123,10 @@ export function TradeWiseDashboard() {
   const [editingProfitGoalValue, setEditingProfitGoalValue] = useState(String(DEFAULT_PROFIT_GOAL));
   const [editingProfitGoalType, setEditingProfitGoalType] = useState<'dollar' | 'percent'>(DEFAULT_PROFIT_GOAL_TYPE);
 
+  const [targetWinRate, setTargetWinRate] = useState(DEFAULT_TARGET_WIN_RATE);
+  const [isEditingTargetWinRate, setIsEditingTargetWinRate] = useState(false);
+  const [editingTargetWinRateValue, setEditingTargetWinRateValue] = useState(String(DEFAULT_TARGET_WIN_RATE));
+
   const portfolioValue = useMemo(() => {
     if (trades.length === 0) return initialPortfolio;
     return trades[0].portfolioAfter;
@@ -150,6 +156,10 @@ export function TradeWiseDashboard() {
       const progress = goalAmount > 0 ? (totalProfit / goalAmount) * 100 : 0;
       return { profitGoalAmount: goalAmount, profitGoalProgress: progress };
   }, [profitGoal, profitGoalType, initialPortfolio, totalProfit]);
+
+  const targetWinRateProgress = useMemo(() => {
+      return targetWinRate > 0 ? (winRate / targetWinRate) * 100 : 0;
+  }, [winRate, targetWinRate]);
 
   const handleAddTrade = (
     values: z.infer<typeof tradeSchema>,
@@ -230,7 +240,20 @@ export function TradeWiseDashboard() {
         });
     }
   };
-
+  
+  const handleSaveTargetWinRate = () => {
+    const newRate = parseFloat(editingTargetWinRateValue);
+    if (!isNaN(newRate) && newRate > 0 && newRate <= 100) {
+        setTargetWinRate(newRate);
+        setIsEditingTargetWinRate(false);
+    } else {
+        toast({
+            variant: "destructive",
+            title: "Invalid Rate",
+            description: "Please enter a valid percentage between 1 and 100.",
+        });
+    }
+  };
 
   const handleReset = () => {
     startTransition(() => {
@@ -246,6 +269,9 @@ export function TradeWiseDashboard() {
       setEditingProfitGoalValue(String(DEFAULT_PROFIT_GOAL));
       setEditingProfitGoalType(DEFAULT_PROFIT_GOAL_TYPE);
       setIsEditingProfitGoal(false);
+      setTargetWinRate(DEFAULT_TARGET_WIN_RATE);
+      setEditingTargetWinRateValue(String(DEFAULT_TARGET_WIN_RATE));
+      setIsEditingTargetWinRate(false);
       form.reset({ amount: "" as any, returnPercentage: "" as any });
     });
   };
@@ -287,7 +313,7 @@ export function TradeWiseDashboard() {
       <main className="flex-1 p-4 md:p-6 lg:p-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-3 flex flex-col gap-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Portfolio Value</CardTitle>
@@ -425,6 +451,49 @@ export function TradeWiseDashboard() {
                                     {formatCurrency(totalProfit)} / {formatCurrency(profitGoalAmount)}
                                 </div>
                                 <Progress value={profitGoalProgress} className="h-2 mt-2" />
+                            </>
+                        )}
+                    </CardContent>
+                </Card>
+                 <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Target Win Rate</CardTitle>
+                        <Activity className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        {isEditingTargetWinRate ? (
+                             <div className="flex flex-col gap-2">
+                                <div className="flex items-center gap-1">
+                                    <Input
+                                        type="number"
+                                        value={editingTargetWinRateValue}
+                                        onChange={(e) => setEditingTargetWinRateValue(e.target.value)}
+                                        className="h-8 text-xl w-24"
+                                        onKeyDown={(e) => e.key === 'Enter' && handleSaveTargetWinRate()}
+                                    />
+                                    <span className="text-xl font-bold">%</span>
+                                </div>
+                                 <div className="flex items-center gap-1">
+                                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleSaveTargetWinRate}>
+                                        <Check className="h-5 w-5" />
+                                    </Button>
+                                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => { setIsEditingTargetWinRate(false); setEditingTargetWinRateValue(String(targetWinRate)); }}>
+                                        <X className="h-5 w-5" />
+                                    </Button>
+                                 </div>
+                             </div>
+                        ) : (
+                            <>
+                                <div className="text-2xl font-bold flex items-center gap-2">
+                                    <span>{targetWinRate}%</span>
+                                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingTargetWinRate(true)}>
+                                        <Pencil className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                                <div className="text-xs text-muted-foreground mt-1">
+                                    Current: {formatPercent(winRate)}
+                                </div>
+                                <Progress value={targetWinRateProgress} className="h-2 mt-2" />
                             </>
                         )}
                     </CardContent>
@@ -578,3 +647,5 @@ export function TradeWiseDashboard() {
     </div>
   );
 }
+
+    
