@@ -4,8 +4,6 @@ import { useState, useMemo, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { suggestTradeAmount } from "@/ai/flows/suggest-trade-amount";
-import type { SuggestTradeAmountOutput } from "@/ai/flows/suggest-trade-amount";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -45,25 +43,20 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import {
   Scale,
   ArrowUpRight,
   ArrowDownLeft,
   RefreshCw,
-  Sparkles,
   TrendingUp,
   CirclePercent,
   DollarSign,
-  Loader2,
-  BrainCircuit,
-  AlertTriangle,
   Pencil,
   Check,
   X,
+  Target,
 } from "lucide-react";
 
 type Trade = {
@@ -75,8 +68,6 @@ type Trade = {
   portfolioAfter: number;
 };
 
-type RiskLevel = "low" | "medium" | "high";
-
 const tradeSchema = z.object({
   amount: z.coerce
     .number({ invalid_type_error: "Must be a number" })
@@ -87,6 +78,7 @@ const tradeSchema = z.object({
 });
 
 const DEFAULT_INITIAL_PORTFOLIO = 1000.0;
+const DEFAULT_SESSION_GOAL = 10;
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("en-US", {
@@ -107,15 +99,16 @@ export function TradeWiseDashboard() {
   const [isEditingInitialPortfolio, setIsEditingInitialPortfolio] = useState(false);
   const [editingInitialPortfolioValue, setEditingInitialPortfolioValue] = useState(String(DEFAULT_INITIAL_PORTFOLIO));
 
+  const [sessionGoal, setSessionGoal] = useState(DEFAULT_SESSION_GOAL);
+  const [isEditingSessionGoal, setIsEditingSessionGoal] = useState(false);
+  const [editingSessionGoalValue, setEditingSessionGoalValue] = useState(String(DEFAULT_SESSION_GOAL));
+
+
   const portfolioValue = useMemo(() => {
     if (trades.length === 0) return initialPortfolio;
     return trades[0].portfolioAfter;
   }, [trades, initialPortfolio]);
   
-  const [riskLevel, setRiskLevel] = useState<RiskLevel>("medium");
-  const [suggestion, setSuggestion] =
-    useState<SuggestTradeAmountOutput | null>(null);
-  const [isSuggestionLoading, setIsSuggestionLoading] = useState(false);
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
 
@@ -127,11 +120,12 @@ export function TradeWiseDashboard() {
     },
   });
 
-  const { wins, losses, winRate } = useMemo(() => {
+  const { wins, losses, winRate, totalProfit } = useMemo(() => {
     const wins = trades.filter((t) => t.outcome === "win").length;
     const losses = trades.length - wins;
     const winRate = trades.length > 0 ? (wins / trades.length) * 100 : 0;
-    return { wins, losses, winRate };
+    const totalProfit = trades.reduce((acc, trade) => acc + trade.profit, 0);
+    return { wins, losses, winRate, totalProfit };
   }, [trades]);
 
   const handleAddTrade = (
@@ -157,8 +151,6 @@ export function TradeWiseDashboard() {
       };
 
       setTrades((prev) => [newTrade, ...prev]);
-      form.reset();
-      setSuggestion(null);
     });
   };
   
@@ -184,6 +176,20 @@ export function TradeWiseDashboard() {
     }
   };
 
+  const handleSaveSessionGoal = () => {
+    const newGoal = parseInt(editingSessionGoalValue, 10);
+    if (!isNaN(newGoal) && newGoal > 0) {
+      setSessionGoal(newGoal);
+      setIsEditingSessionGoal(false);
+    } else {
+      toast({
+          variant: "destructive",
+          title: "Invalid Goal",
+          description: "Please enter a valid positive number for the session goal.",
+      });
+    }
+  };
+
 
   const handleReset = () => {
     startTransition(() => {
@@ -191,37 +197,11 @@ export function TradeWiseDashboard() {
       setInitialPortfolio(DEFAULT_INITIAL_PORTFOLIO);
       setEditingInitialPortfolioValue(String(DEFAULT_INITIAL_PORTFOLIO));
       setIsEditingInitialPortfolio(false);
-      setSuggestion(null);
-      form.reset();
+      setSessionGoal(DEFAULT_SESSION_GOAL);
+      setEditingSessionGoalValue(String(DEFAULT_SESSION_GOAL));
+      setIsEditingSessionGoal(false);
+      form.reset({ amount: "" as any, returnPercentage: "" as any });
     });
-  };
-
-  const handleGetSuggestion = async () => {
-    setIsSuggestionLoading(true);
-    setSuggestion(null);
-    try {
-      const tradeHistory = trades.map((t) => ({
-        amount: t.amount,
-        returnPercentage: t.returnPercentage,
-        outcome: t.outcome,
-      }));
-      const result = await suggestTradeAmount({
-        tradeHistory,
-        currentPortfolioValue: portfolioValue,
-        riskLevel,
-      });
-      setSuggestion(result);
-    } catch (error) {
-      console.error("AI suggestion failed:", error);
-      toast({
-        variant: "destructive",
-        title: "AI Suggestion Error",
-        description:
-          "Could not generate a suggestion. Please check your connection and try again.",
-      });
-    } finally {
-      setIsSuggestionLoading(false);
-    }
   };
 
   return (
@@ -261,7 +241,7 @@ export function TradeWiseDashboard() {
       <main className="flex-1 p-4 md:p-6 lg:p-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-3 flex flex-col gap-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Portfolio Value</CardTitle>
@@ -297,6 +277,16 @@ export function TradeWiseDashboard() {
                         </div>
                     </CardContent>
                 </Card>
+                 <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total P/L</CardTitle>
+                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className={`text-2xl font-bold ${totalProfit >= 0 ? 'text-primary' : 'text-destructive'}`}>{formatCurrency(totalProfit)}</div>
+                        <p className="text-xs text-muted-foreground">in this session</p>
+                    </CardContent>
+                </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Win Rate</CardTitle>
@@ -309,12 +299,37 @@ export function TradeWiseDashboard() {
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Trades</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-medium">Session Goal</CardTitle>
+                        <Target className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{trades.length}</div>
-                        <p className="text-xs text-muted-foreground">in this session</p>
+                        <div className="text-2xl font-bold">
+                          {isEditingSessionGoal ? (
+                              <div className="flex items-center gap-1">
+                                <Input 
+                                  type="number" 
+                                  value={editingSessionGoalValue}
+                                  onChange={(e) => setEditingSessionGoalValue(e.target.value)}
+                                  className="h-8 text-xl w-24"
+                                  onKeyDown={(e) => e.key === 'Enter' && handleSaveSessionGoal()}
+                                />
+                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleSaveSessionGoal}>
+                                  <Check className="h-5 w-5"/>
+                                </Button>
+                                 <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => { setIsEditingSessionGoal(false); setEditingSessionGoalValue(String(sessionGoal))}}>
+                                  <X className="h-5 w-5"/>
+                                </Button>
+                              </div>
+                            ) : (
+                              <span className="flex items-center gap-1">
+                                {trades.length} / {sessionGoal}
+                                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsEditingSessionGoal(true)}>
+                                  <Pencil className="h-4 w-4"/>
+                                </Button>
+                              </span>
+                            )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Total trades in session</p>
                     </CardContent>
                 </Card>
             </div>
