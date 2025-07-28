@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useTransition } from "react";
@@ -53,7 +54,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { suggestTradeAmount, SuggestTradeAmountOutput, SuggestTradeAmountInput } from "@/ai/flows/suggest-trade-amount";
 
 import {
@@ -131,7 +131,7 @@ export function TradeWiseDashboard() {
   const [isEditingTargetWinRate, setIsEditingTargetWinRate] = useState(false);
   const [editingTargetWinRateValue, setEditingTargetWinRateValue] = useState(String(DEFAULT_TARGET_WIN_RATE));
 
-  const [riskLevel, setRiskLevel] = useState<"low" | "medium" | "high">("medium");
+  const [riskLevel, setRiskLevel] = useState<"low" | "medium" | "high">("high");
   const [suggestion, setSuggestion] = useState<SuggestTradeAmountOutput | null>(null);
   const [isSuggesting, setIsSuggesting] = useState(false);
 
@@ -282,7 +282,7 @@ export function TradeWiseDashboard() {
       setIsEditingTargetWinRate(false);
       form.reset({ amount: "" as any, returnPercentage: "" as any });
       setSuggestion(null);
-      setRiskLevel("medium");
+      setRiskLevel("high");
     });
   };
 
@@ -694,32 +694,10 @@ export function TradeWiseDashboard() {
                         <CardTitle>Smart Suggestion</CardTitle>
                     </div>
                     <CardDescription>
-                        Let AI suggest an optimal trade amount.
+                        Let AI suggest an optimal trade amount. Risk level is set to high.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-4">
-                    <div>
-                        <Label className="text-sm font-medium">Risk Level</Label>
-                        <RadioGroup
-                            value={riskLevel}
-                            onValueChange={(value) => setRiskLevel(value as any)}
-                            className="flex gap-4 pt-2"
-                        >
-                            <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="low" id="low" />
-                                <Label htmlFor="low">Low</Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="medium" id="medium" />
-                                <Label htmlFor="medium">Medium</Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="high" id="high" />
-                                <Label htmlFor="high">High</Label>
-                            </div>
-                        </RadioGroup>
-                    </div>
-
                     {suggestion && (
                         <div className="p-4 bg-muted/50 rounded-lg space-y-3">
                             <div>
@@ -757,4 +735,5 @@ export function TradeWiseDashboard() {
       </main>
     </div>
   );
-}
+
+    
