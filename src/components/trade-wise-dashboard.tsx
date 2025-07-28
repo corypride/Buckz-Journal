@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useTransition } from "react";
@@ -54,6 +53,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { suggestTradeAmount, SuggestTradeAmountOutput, SuggestTradeAmountInput } from "@/ai/flows/suggest-trade-amount";
+
 import {
   Scale,
   ArrowUpRight,
@@ -68,6 +70,8 @@ import {
   Target,
   Trophy,
   Activity,
+  Lightbulb,
+  Loader2,
 } from "lucide-react";
 
 type Trade = {
@@ -127,6 +131,11 @@ export function TradeWiseDashboard() {
   const [isEditingTargetWinRate, setIsEditingTargetWinRate] = useState(false);
   const [editingTargetWinRateValue, setEditingTargetWinRateValue] = useState(String(DEFAULT_TARGET_WIN_RATE));
 
+  const [riskLevel, setRiskLevel] = useState<"low" | "medium" | "high">("medium");
+  const [suggestion, setSuggestion] = useState<SuggestTradeAmountOutput | null>(null);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+
+
   const portfolioValue = useMemo(() => {
     if (trades.length === 0) return initialPortfolio;
     return trades[0].portfolioAfter;
@@ -143,12 +152,13 @@ export function TradeWiseDashboard() {
     },
   });
 
-  const { wins, losses, winRate, totalProfit } = useMemo(() => {
+  const { wins, losses, winRate, totalProfit, tradeHistoryForAI } = useMemo(() => {
     const wins = trades.filter((t) => t.outcome === "win").length;
     const losses = trades.length - wins;
     const winRate = trades.length > 0 ? (wins / trades.length) * 100 : 0;
     const totalProfit = trades.reduce((acc, trade) => acc + trade.profit, 0);
-    return { wins, losses, winRate, totalProfit };
+    const tradeHistoryForAI = trades.map(t => ({ amount: t.amount, returnPercentage: t.returnPercentage, outcome: t.outcome }));
+    return { wins, losses, winRate, totalProfit, tradeHistoryForAI };
   }, [trades]);
 
   const { profitGoalAmount, profitGoalProgress } = useMemo(() => {
@@ -184,9 +194,7 @@ export function TradeWiseDashboard() {
       };
 
       setTrades((prev) => [newTrade, ...prev]);
-      
-      // Don't reset form so user can re-use values
-      // form.reset({ amount: "" as any, returnPercentage: "" as any });
+      setSuggestion(null);
     });
   };
   
@@ -273,7 +281,43 @@ export function TradeWiseDashboard() {
       setEditingTargetWinRateValue(String(DEFAULT_TARGET_WIN_RATE));
       setIsEditingTargetWinRate(false);
       form.reset({ amount: "" as any, returnPercentage: "" as any });
+      setSuggestion(null);
+      setRiskLevel("medium");
     });
+  };
+
+  const handleGetSuggestion = async () => {
+    setIsSuggesting(true);
+    setSuggestion(null);
+
+    const input: SuggestTradeAmountInput = {
+        tradeHistory: tradeHistoryForAI,
+        currentPortfolioValue: portfolioValue,
+        riskLevel,
+        profitGoal: profitGoalAmount,
+        targetWinRate,
+        tradesRemaining: sessionGoal - trades.length > 0 ? sessionGoal - trades.length : 1,
+    };
+    
+    try {
+        const result = await suggestTradeAmount(input);
+        setSuggestion(result);
+    } catch (error) {
+        console.error("Error getting suggestion:", error);
+        toast({
+            variant: "destructive",
+            title: "Suggestion Failed",
+            description: "Could not get a suggestion from the AI. Please try again.",
+        });
+    } finally {
+        setIsSuggesting(false);
+    }
+  };
+
+  const handleApplySuggestion = () => {
+    if (suggestion) {
+        form.setValue("amount", suggestion.suggestedTradeAmount);
+    }
   };
 
   return (
@@ -312,8 +356,8 @@ export function TradeWiseDashboard() {
 
       <main className="flex-1 p-4 md:p-6 lg:p-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-3 flex flex-col gap-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="lg:col-span-2 flex flex-col gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Portfolio Value</CardTitle>
@@ -594,7 +638,7 @@ export function TradeWiseDashboard() {
                           trades.map((trade) => (
                             <TableRow key={trade.id}>
                               <TableCell className="font-medium">
-                                #{trade.id}
+                                #{trades.length - trades.indexOf(trade)}
                               </TableCell>
                               <TableCell className="text-left">
                                 {formatCurrency(trade.amount)}
@@ -642,10 +686,75 @@ export function TradeWiseDashboard() {
               </CardContent>
             </Card>
           </div>
+          <div className="lg:col-span-1">
+            <Card className="shadow-lg">
+                <CardHeader>
+                    <div className="flex items-center gap-2">
+                        <Lightbulb className="h-6 w-6 text-primary" />
+                        <CardTitle>Smart Suggestion</CardTitle>
+                    </div>
+                    <CardDescription>
+                        Let AI suggest an optimal trade amount.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-4">
+                    <div>
+                        <Label className="text-sm font-medium">Risk Level</Label>
+                        <RadioGroup
+                            value={riskLevel}
+                            onValueChange={(value) => setRiskLevel(value as any)}
+                            className="flex gap-4 pt-2"
+                        >
+                            <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="low" id="low" />
+                                <Label htmlFor="low">Low</Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="medium" id="medium" />
+                                <Label htmlFor="medium">Medium</Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="high" id="high" />
+                                <Label htmlFor="high">High</Label>
+                            </div>
+                        </RadioGroup>
+                    </div>
+
+                    {suggestion && (
+                        <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+                            <div>
+                                <Label className="text-xs text-muted-foreground">Suggested Amount</Label>
+                                <p className="text-2xl font-bold text-primary">{formatCurrency(suggestion.suggestedTradeAmount)}</p>
+                            </div>
+                             <div>
+                                <Label className="text-xs text-muted-foreground">Bankruptcy Risk</Label>
+                                <p className={`font-bold ${suggestion.bankruptcyRisk > 20 ? 'text-destructive' : ''}`}>{formatPercent(suggestion.bankruptcyRisk)}</p>
+                            </div>
+                            <div>
+                                <Label className="text-xs text-muted-foreground">Reasoning</Label>
+                                <p className="text-sm">{suggestion.reasoning}</p>
+                            </div>
+                             <Button onClick={handleApplySuggestion} size="sm" className="w-full">
+                                Apply Suggestion
+                            </Button>
+                        </div>
+                    )}
+
+                    {isSuggesting && (
+                         <div className="flex items-center justify-center p-8 bg-muted/50 rounded-lg">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                    )}
+                </CardContent>
+                <CardFooter>
+                    <Button onClick={handleGetSuggestion} disabled={isSuggesting || isPending} className="w-full">
+                        {isSuggesting ? 'Thinking...' : 'Get Suggestion'}
+                    </Button>
+                </CardFooter>
+            </Card>
+          </div>
         </div>
       </main>
     </div>
   );
 }
-
-    
