@@ -931,10 +931,24 @@ export function TradeWiseDashboard() {
                                                   </Badge>
                                               </TableCell>
                                               <TableCell>
-                                                  <span className="text-primary">{p.calls.wins}</span> / <span className="text-destructive">{p.calls.losses}</span>
+                                                  <div className="flex flex-col">
+                                                    <div>
+                                                        <span className="text-primary">{p.calls.wins}</span> / <span className="text-destructive">{p.calls.losses}</span>
+                                                    </div>
+                                                    <div className="text-xs text-muted-foreground">
+                                                        {p.calls.wins + p.calls.losses > 0 ? formatPercent((p.calls.wins / (p.calls.wins + p.calls.losses)) * 100) : 'N/A'}
+                                                    </div>
+                                                  </div>
                                               </TableCell>
                                               <TableCell>
-                                                  <span className="text-primary">{p.puts.wins}</span> / <span className="text-destructive">{p.puts.losses}</span>
+                                                   <div className="flex flex-col">
+                                                    <div>
+                                                        <span className="text-primary">{p.puts.wins}</span> / <span className="text-destructive">{p.puts.losses}</span>
+                                                    </div>
+                                                    <div className="text-xs text-muted-foreground">
+                                                        {p.puts.wins + p.puts.losses > 0 ? formatPercent((p.puts.wins / (p.puts.wins + p.puts.losses)) * 100) : 'N/A'}
+                                                    </div>
+                                                  </div>
                                               </TableCell>
                                           </TableRow>
                                       ))
