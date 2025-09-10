@@ -53,7 +53,7 @@ You will analyze the trader's past trade history, current portfolio value, risk 
 
 Consider the following factors:
 
-*   **Trade History:** Analyze the trader's past trades to identify patterns and calculate their win rate and average return percentage. Pay attention to performance on specific stocks and trade types (calls vs. puts).
+*   **Trade History:** Analyze the trader's past trades to identify patterns and calculate their win rate and average return percentage. Pay special attention to the outcome of the very first trade in the session as it can set the tone.
 *   **Current Portfolio Value:** Take into account the current value of the trader's portfolio to determine how much capital they can afford to risk.
 *   **Risk Level:** Adjust the suggested trade amount based on the trader's selected risk level. A low-risk level should result in a more conservative trade amount, while a high-risk level can result in a more aggressive trade amount.
 *   **Session Goals:** The primary objective is to reach the Profit Goal and Target Win Rate within the remaining trades. The suggested amount should be ambitious enough to make progress but not so risky that it jeopardizes the entire portfolio.
@@ -72,7 +72,7 @@ Trade History:
     - Stock: {{stock}}, Type: {{tradeType}}, Amount: {{amount}}, Return Percentage: {{returnPercentage}}, Outcome: {{outcome}}
   {{/each}}
 {{else}}
-  No trades in this session yet.
+  No trades in this session yet. The first trade is a crucial benchmark. Suggest a conservative starting amount.
 {{/if}}
 
 Based on this information, suggest an optimal trade amount that maximizes the chances of reaching the session goals while managing risk according to the selected level. Provide clear reasoning for your suggestion and the calculated bankruptcy risk.
@@ -92,3 +92,5 @@ const suggestTradeAmountFlow = ai.defineFlow(
     return output!;
   }
 );
+
+    

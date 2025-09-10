@@ -140,7 +140,7 @@ export function TradeWiseDashboard() {
   const [isEditingTargetWinRate, setIsEditingTargetWinRate] = useState(false);
   const [editingTargetWinRateValue, setEditingTargetWinRateValue] = useState(String(DEFAULT_TARGET_WIN_RATE));
 
-  const [riskLevel, setRiskLevel] = useState<"low" | "medium" | "high">("high");
+  const [riskLevel, setRiskLevel] = useState<"low" | "medium" | "high">("medium");
   const [suggestion, setSuggestion] = useState<SuggestTradeAmountOutput | null>(null);
   const [isSuggesting, setIsSuggesting] = useState(false);
 
@@ -324,7 +324,7 @@ export function TradeWiseDashboard() {
       setIsEditingTargetWinRate(false);
       form.reset({ stock: "", amount: "" as any, returnPercentage: "" as any, tradeType: "call" });
       setSuggestion(null);
-      setRiskLevel("high");
+      setRiskLevel("medium");
     });
   };
 
@@ -973,3 +973,5 @@ export function TradeWiseDashboard() {
     </div>
   );
 }
+
+    
