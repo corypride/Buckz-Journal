@@ -76,6 +76,7 @@ import {
 
 type Trade = {
   id: number;
+  stock: string;
   amount: number;
   returnPercentage: number;
   outcome: "win" | "loss";
@@ -84,6 +85,7 @@ type Trade = {
 };
 
 const tradeSchema = z.object({
+  stock: z.string().min(1, { message: "Ticker is required" }),
   amount: z.coerce
     .number({ invalid_type_error: "Must be a number" })
     .positive({ message: "Amount must be positive" }),
@@ -147,6 +149,7 @@ export function TradeWiseDashboard() {
   const form = useForm<z.infer<typeof tradeSchema>>({
     resolver: zodResolver(tradeSchema),
     defaultValues: {
+      stock: "",
       amount: "" as any,
       returnPercentage: "" as any,
     },
@@ -157,7 +160,7 @@ export function TradeWiseDashboard() {
     const losses = trades.length - wins;
     const winRate = trades.length > 0 ? (wins / trades.length) * 100 : 0;
     const totalProfit = trades.reduce((acc, trade) => acc + trade.profit, 0);
-    const tradeHistoryForAI = trades.map(t => ({ amount: t.amount, returnPercentage: t.returnPercentage, outcome: t.outcome }));
+    const tradeHistoryForAI = trades.map(t => ({ stock: t.stock, amount: t.amount, returnPercentage: t.returnPercentage, outcome: t.outcome }));
     return { wins, losses, winRate, totalProfit, tradeHistoryForAI };
   }, [trades]);
 
@@ -176,7 +179,7 @@ export function TradeWiseDashboard() {
     outcome: "win" | "loss"
   ) => {
     startTransition(() => {
-      const { amount, returnPercentage } = values;
+      const { stock, amount, returnPercentage } = values;
       const currentPortfolio = portfolioValue;
       const profit = amount * (returnPercentage / 100);
       const newPortfolioValue =
@@ -186,6 +189,7 @@ export function TradeWiseDashboard() {
 
       const newTrade: Trade = {
         id: trades.length + 1,
+        stock: stock.toUpperCase(),
         amount,
         returnPercentage,
         outcome,
@@ -195,6 +199,8 @@ export function TradeWiseDashboard() {
 
       setTrades((prev) => [newTrade, ...prev]);
       setSuggestion(null);
+      // Do not reset the form fully, just clear the outcome-specific fields if needed
+      // form.reset({ stock, amount, returnPercentage });
     });
   };
   
@@ -280,7 +286,7 @@ export function TradeWiseDashboard() {
       setTargetWinRate(DEFAULT_TARGET_WIN_RATE);
       setEditingTargetWinRateValue(String(DEFAULT_TARGET_WIN_RATE));
       setIsEditingTargetWinRate(false);
-      form.reset({ amount: "" as any, returnPercentage: "" as any });
+      form.reset({ stock: "", amount: "" as any, returnPercentage: "" as any });
       setSuggestion(null);
       setRiskLevel("high");
     });
@@ -356,8 +362,8 @@ export function TradeWiseDashboard() {
 
       <main className="flex-1 p-4 md:p-6 lg:p-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 flex flex-col gap-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="lg:col-span-3 flex flex-col gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Portfolio Value</CardTitle>
@@ -395,12 +401,12 @@ export function TradeWiseDashboard() {
                 </Card>
                  <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total P/L</CardTitle>
+                        <CardTitle className="text-sm font-medium">Session P/L</CardTitle>
                         <TrendingUp className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         <div className={`text-2xl font-bold ${totalProfit >= 0 ? 'text-primary' : 'text-destructive'}`}>{formatCurrency(totalProfit)}</div>
-                        <p className="text-xs text-muted-foreground">in this session</p>
+                        <p className="text-xs text-muted-foreground">{formatPercent(totalProfit/initialPortfolio * 100)} return</p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -415,7 +421,7 @@ export function TradeWiseDashboard() {
                 </Card>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Session Goal</CardTitle>
+                        <CardTitle className="text-sm font-medium">Trades</CardTitle>
                         <Target className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
@@ -445,7 +451,7 @@ export function TradeWiseDashboard() {
                               </span>
                             )}
                         </div>
-                        <p className="text-xs text-muted-foreground">Total trades in session</p>
+                        <p className="text-xs text-muted-foreground">Session goal</p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -546,9 +552,9 @@ export function TradeWiseDashboard() {
             
             <Card className="flex-1 flex flex-col shadow-lg">
               <CardHeader>
-                <CardTitle>Trade Log</CardTitle>
+                <CardTitle>Trade Journal</CardTitle>
                 <CardDescription>
-                  History of trades in this session. Add new trades below.
+                  Log new trades and review your session history.
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex-1 flex flex-col min-h-0">
@@ -557,6 +563,7 @@ export function TradeWiseDashboard() {
                     <Table>
                       <TableHeader>
                         <TableRow>
+                          <TableHead className="w-[120px]">Stock</TableHead>
                           <TableHead className="w-[120px]">Amount ($)</TableHead>
                           <TableHead className="w-[140px]">Return (%)</TableHead>
                           <TableHead className="w-[180px]">Action</TableHead>
@@ -567,6 +574,20 @@ export function TradeWiseDashboard() {
                       </TableHeader>
                       <TableBody>
                         <TableRow>
+                            <TableCell>
+                                <FormField
+                                  control={form.control}
+                                  name="stock"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormControl>
+                                        <Input placeholder="e.g., AAPL" {...field} className="text-sm uppercase" />
+                                      </FormControl>
+                                      <FormMessage className="text-xs"/>
+                                    </FormItem>
+                                  )}
+                                />
+                            </TableCell>
                             <TableCell>
                                 <FormField
                                   control={form.control}
@@ -626,9 +647,10 @@ export function TradeWiseDashboard() {
                     <Table>
                        <TableHeader>
                         <TableRow>
-                          <TableHead className="w-[120px]">Trade</TableHead>
+                          <TableHead className="w-[80px]">Trade</TableHead>
+                          <TableHead className="w-[120px]">Stock</TableHead>
                           <TableHead className="w-[140px]">Amount</TableHead>
-                           <TableHead className="w-[180px]">Outcome</TableHead>
+                          <TableHead className="w-[180px]">Outcome</TableHead>
                           <TableHead>P/L</TableHead>
                           <TableHead className="text-right">Portfolio</TableHead>
                         </TableRow>
@@ -639,6 +661,9 @@ export function TradeWiseDashboard() {
                             <TableRow key={trade.id}>
                               <TableCell className="font-medium">
                                 #{trades.length - trades.indexOf(trade)}
+                              </TableCell>
+                               <TableCell className="font-medium">
+                                {trade.stock}
                               </TableCell>
                               <TableCell className="text-left">
                                 {formatCurrency(trade.amount)}
@@ -672,7 +697,7 @@ export function TradeWiseDashboard() {
                         ) : (
                           <TableRow>
                             <TableCell
-                              colSpan={5}
+                              colSpan={6}
                               className="h-24 text-center text-muted-foreground"
                             >
                               No trades logged yet.
@@ -686,8 +711,8 @@ export function TradeWiseDashboard() {
               </CardContent>
             </Card>
           </div>
-          <div className="lg:col-span-1">
-            <Card className="shadow-lg">
+          <div className="lg:col-span-3">
+             <Card className="shadow-lg">
                 <CardHeader>
                     <div className="flex items-center gap-2">
                         <Lightbulb className="h-6 w-6 text-primary" />
@@ -735,5 +760,4 @@ export function TradeWiseDashboard() {
       </main>
     </div>
   );
-
-    
+}
