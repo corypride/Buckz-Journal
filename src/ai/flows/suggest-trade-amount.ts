@@ -21,6 +21,7 @@ const SuggestTradeAmountInputSchema = z.object({
         .number()
         .describe('The predicted return percentage of the trade.'),
       outcome: z.enum(['win', 'loss']).describe('The outcome of the trade.'),
+      tradeType: z.enum(['call', 'put']).describe('The type of trade (call or put).')
     })
   ).describe('The history of past trades.'),
   currentPortfolioValue: z.number().describe('The current value of the portfolio.'),
@@ -52,7 +53,7 @@ You will analyze the trader's past trade history, current portfolio value, risk 
 
 Consider the following factors:
 
-*   **Trade History:** Analyze the trader's past trades to identify patterns and calculate their win rate and average return percentage. Pay attention to performance on specific stocks.
+*   **Trade History:** Analyze the trader's past trades to identify patterns and calculate their win rate and average return percentage. Pay attention to performance on specific stocks and trade types (calls vs. puts).
 *   **Current Portfolio Value:** Take into account the current value of the trader's portfolio to determine how much capital they can afford to risk.
 *   **Risk Level:** Adjust the suggested trade amount based on the trader's selected risk level. A low-risk level should result in a more conservative trade amount, while a high-risk level can result in a more aggressive trade amount.
 *   **Session Goals:** The primary objective is to reach the Profit Goal and Target Win Rate within the remaining trades. The suggested amount should be ambitious enough to make progress but not so risky that it jeopardizes the entire portfolio.
@@ -68,7 +69,7 @@ User's Data:
 Trade History:
 {{#if tradeHistory.length}}
   {{#each tradeHistory}}
-    - Stock: {{stock}}, Amount: {{amount}}, Return Percentage: {{returnPercentage}}, Outcome: {{outcome}}
+    - Stock: {{stock}}, Type: {{tradeType}}, Amount: {{amount}}, Return Percentage: {{returnPercentage}}, Outcome: {{outcome}}
   {{/each}}
 {{else}}
   No trades in this session yet.

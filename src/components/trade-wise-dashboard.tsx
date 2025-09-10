@@ -54,6 +54,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Badge } from "@/components/ui/badge";
 import { suggestTradeAmount, SuggestTradeAmountOutput, SuggestTradeAmountInput } from "@/ai/flows/suggest-trade-amount";
 
 import {
@@ -72,6 +74,8 @@ import {
   Activity,
   Lightbulb,
   Loader2,
+  PlusCircle,
+  Trash2,
 } from "lucide-react";
 
 type Trade = {
@@ -82,16 +86,18 @@ type Trade = {
   outcome: "win" | "loss";
   profit: number;
   portfolioAfter: number;
+  tradeType: 'call' | 'put';
 };
 
 const tradeSchema = z.object({
-  stock: z.string().min(1, { message: "Ticker is required" }),
+  stock: z.string().min(1, { message: "Please select a stock" }),
   amount: z.coerce
     .number({ invalid_type_error: "Must be a number" })
     .positive({ message: "Amount must be positive" }),
   returnPercentage: z.coerce
     .number({ invalid_type_error: "Must be a number" })
     .gte(0, { message: "Return must be non-negative" }),
+  tradeType: z.enum(['call', 'put'], { required_error: "Please select a trade type" }),
 });
 
 const DEFAULT_INITIAL_PORTFOLIO = 1000.0;
@@ -137,6 +143,9 @@ export function TradeWiseDashboard() {
   const [suggestion, setSuggestion] = useState<SuggestTradeAmountOutput | null>(null);
   const [isSuggesting, setIsSuggesting] = useState(false);
 
+  const [sessionStocks, setSessionStocks] = useState<string[]>([]);
+  const [newStockInput, setNewStockInput] = useState("");
+
 
   const portfolioValue = useMemo(() => {
     if (trades.length === 0) return initialPortfolio;
@@ -152,6 +161,7 @@ export function TradeWiseDashboard() {
       stock: "",
       amount: "" as any,
       returnPercentage: "" as any,
+      tradeType: "call",
     },
   });
 
@@ -160,23 +170,27 @@ export function TradeWiseDashboard() {
     const losses = trades.length - wins;
     const winRate = trades.length > 0 ? (wins / trades.length) * 100 : 0;
     const totalProfit = trades.reduce((acc, trade) => acc + trade.profit, 0);
-    const tradeHistoryForAI = trades.map(t => ({ stock: t.stock, amount: t.amount, returnPercentage: t.returnPercentage, outcome: t.outcome })).reverse();
+    const tradeHistoryForAI = trades.map(t => ({ stock: t.stock, amount: t.amount, returnPercentage: t.returnPercentage, outcome: t.outcome, tradeType: t.tradeType })).reverse();
     return { wins, losses, winRate, totalProfit, tradeHistoryForAI };
   }, [trades]);
 
   const stockPerformance = useMemo(() => {
     const performance: {
-      [key: string]: { wins: number; losses: number; total: number };
+      [key: string]: { wins: number; losses: number; total: number, calls: { wins: number, losses: number }, puts: { wins: number, losses: number } };
     } = {};
     trades.forEach((trade) => {
       if (!performance[trade.stock]) {
-        performance[trade.stock] = { wins: 0, losses: 0, total: 0 };
+        performance[trade.stock] = { wins: 0, losses: 0, total: 0, calls: { wins: 0, losses: 0 }, puts: { wins: 0, losses: 0 } };
       }
       performance[trade.stock].total++;
       if (trade.outcome === "win") {
         performance[trade.stock].wins++;
+        if (trade.tradeType === 'call') performance[trade.stock].calls.wins++;
+        else performance[trade.stock].puts.wins++;
       } else {
         performance[trade.stock].losses++;
+        if (trade.tradeType === 'call') performance[trade.stock].calls.losses++;
+        else performance[trade.stock].puts.losses++;
       }
     });
     return Object.entries(performance)
@@ -199,7 +213,7 @@ export function TradeWiseDashboard() {
     outcome: "win" | "loss"
   ) => {
     startTransition(() => {
-      const { stock, amount, returnPercentage } = values;
+      const { stock, amount, returnPercentage, tradeType } = values;
       const currentPortfolio = portfolioValue;
       const profit = amount * (returnPercentage / 100);
       const newPortfolioValue =
@@ -215,12 +229,11 @@ export function TradeWiseDashboard() {
         outcome,
         profit: outcome === "win" ? profit : -amount,
         portfolioAfter: newPortfolioValue,
+        tradeType,
       };
 
       setTrades((prev) => [...prev, newTrade]);
       setSuggestion(null);
-      // Do not reset the form fully, just clear the outcome-specific fields if needed
-      // form.reset({ stock, amount, returnPercentage });
     });
   };
   
@@ -292,6 +305,8 @@ export function TradeWiseDashboard() {
   const handleReset = () => {
     startTransition(() => {
       setTrades([]);
+      setSessionStocks([]);
+      setNewStockInput("");
       setInitialPortfolio(DEFAULT_INITIAL_PORTFOLIO);
       setEditingInitialPortfolioValue(String(DEFAULT_INITIAL_PORTFOLIO));
       setIsEditingInitialPortfolio(false);
@@ -306,7 +321,7 @@ export function TradeWiseDashboard() {
       setTargetWinRate(DEFAULT_TARGET_WIN_RATE);
       setEditingTargetWinRateValue(String(DEFAULT_TARGET_WIN_RATE));
       setIsEditingTargetWinRate(false);
-      form.reset({ stock: "", amount: "" as any, returnPercentage: "" as any });
+      form.reset({ stock: "", amount: "" as any, returnPercentage: "" as any, tradeType: "call" });
       setSuggestion(null);
       setRiskLevel("high");
     });
@@ -317,7 +332,7 @@ export function TradeWiseDashboard() {
     setSuggestion(null);
 
     const input: SuggestTradeAmountInput = {
-        tradeHistory: tradeHistoryForAI,
+        tradeHistory: tradeHistoryForAI as any, // Cast because tradeType is added
         currentPortfolioValue: portfolioValue,
         riskLevel,
         profitGoal: profitGoalAmount,
@@ -346,6 +361,30 @@ export function TradeWiseDashboard() {
     }
   };
 
+  const handleAddStock = () => {
+    const stockToAdd = newStockInput.trim().toUpperCase();
+    if (stockToAdd && !sessionStocks.includes(stockToAdd)) {
+        setSessionStocks(prev => [...prev, stockToAdd]);
+        setNewStockInput("");
+        if (sessionStocks.length === 0) {
+            form.setValue("stock", stockToAdd);
+        }
+    } else if (sessionStocks.includes(stockToAdd)) {
+        toast({
+            variant: "destructive",
+            title: "Stock Already Exists",
+            description: `"${stockToAdd}" is already in your session list.`,
+        });
+    }
+  };
+
+  const handleRemoveStock = (stockToRemove: string) => {
+      setSessionStocks(prev => prev.filter(s => s !== stockToRemove));
+      if (form.getValues("stock") === stockToRemove) {
+          form.setValue("stock", "");
+      }
+  };
+
   return (
     <div className="flex flex-col min-h-dvh bg-background text-foreground font-sans">
       <header className="flex items-center justify-between p-4 md:p-6 border-b border-white/10">
@@ -366,8 +405,7 @@ export function TradeWiseDashboard() {
             <AlertDialogHeader>
               <AlertDialogTitle>Are you sure?</AlertDialogTitle>
               <AlertDialogDescription>
-                This will clear all trades and reset your portfolio to the
-                initial value. This action cannot be undone.
+                This will clear all trades and session data. This action cannot be undone.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -570,8 +608,8 @@ export function TradeWiseDashboard() {
                 </Card>
             </div>
             
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              <Card className="flex-1 flex flex-col shadow-lg">
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+              <Card className="xl:col-span-2 flex flex-col shadow-lg">
                 <CardHeader>
                   <CardTitle>Trade Journal</CardTitle>
                   <CardDescription>
@@ -586,7 +624,8 @@ export function TradeWiseDashboard() {
                           <TableRow>
                             <TableHead className="w-[120px]">Stock</TableHead>
                             <TableHead className="w-[120px]">Amount ($)</TableHead>
-                            <TableHead className="w-[140px]">Return (%)</TableHead>
+                            <TableHead className="w-[120px]">Return (%)</TableHead>
+                            <TableHead className="w-[150px]">Type</TableHead>
                             <TableHead className="w-[180px]">Action</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -599,7 +638,16 @@ export function TradeWiseDashboard() {
                                     render={({ field }) => (
                                       <FormItem>
                                         <FormControl>
-                                          <Input placeholder="e.g., AAPL" {...field} className="text-sm uppercase" />
+                                           <Select onValueChange={field.onChange} value={field.value} disabled={sessionStocks.length === 0}>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select Stock" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {sessionStocks.map(stock => (
+                                                        <SelectItem key={stock} value={stock}>{stock}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
                                         </FormControl>
                                         <FormMessage className="text-xs"/>
                                       </FormItem>
@@ -635,6 +683,41 @@ export function TradeWiseDashboard() {
                                   />
                               </TableCell>
                               <TableCell>
+                                <FormField
+                                  control={form.control}
+                                  name="tradeType"
+                                  render={({ field }) => (
+                                    <FormItem className="space-y-3">
+                                      <FormControl>
+                                        <RadioGroup
+                                          onValueChange={field.onChange}
+                                          defaultValue={field.value}
+                                          className="flex items-center space-x-2"
+                                        >
+                                          <FormItem className="flex items-center space-x-2 space-y-0">
+                                            <FormControl>
+                                              <RadioGroupItem value="call" />
+                                            </FormControl>
+                                            <FormLabel className="font-normal">
+                                              Call
+                                            </FormLabel>
+                                          </FormItem>
+                                          <FormItem className="flex items-center space-x-2 space-y-0">
+                                            <FormControl>
+                                              <RadioGroupItem value="put" />
+                                            </FormControl>
+                                            <FormLabel className="font-normal">
+                                              Put
+                                            </FormLabel>
+                                          </FormItem>
+                                        </RadioGroup>
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              </TableCell>
+                              <TableCell>
                                   <div className="flex gap-2">
                                       <Button
                                         onClick={form.handleSubmit((data) => handleAddTrade(data, "win"))}
@@ -667,6 +750,7 @@ export function TradeWiseDashboard() {
                           <TableRow>
                             <TableHead className="w-[80px]">Trade</TableHead>
                             <TableHead className="w-[120px]">Stock</TableHead>
+                            <TableHead>Type</TableHead>
                             <TableHead className="w-[140px]">Amount</TableHead>
                             <TableHead className="w-[180px]">Outcome</TableHead>
                             <TableHead>P/L</TableHead>
@@ -683,6 +767,7 @@ export function TradeWiseDashboard() {
                                  <TableCell className="font-medium">
                                   {trade.stock}
                                 </TableCell>
+                                <TableCell className="capitalize">{trade.tradeType}</TableCell>
                                 <TableCell className="text-left">
                                   {formatCurrency(trade.amount)}
                                 </TableCell>
@@ -715,7 +800,7 @@ export function TradeWiseDashboard() {
                           ) : (
                             <TableRow>
                               <TableCell
-                                colSpan={6}
+                                colSpan={7}
                                 className="h-24 text-center text-muted-foreground"
                               >
                                 No trades logged yet.
@@ -729,94 +814,144 @@ export function TradeWiseDashboard() {
                 </CardContent>
               </Card>
 
-              <Card className="flex-1 flex flex-col shadow-lg">
+              <Card className="shadow-lg">
                 <CardHeader>
-                    <CardTitle>Stock Performance</CardTitle>
+                    <CardTitle>Session Stocks</CardTitle>
                     <CardDescription>
-                        Review your win/loss ratio for each stock.
+                        Manage the stocks for this trading session.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <ScrollArea className="h-[400px]">
-                      <Table>
-                          <TableHeader>
-                              <TableRow>
-                                  <TableHead>Stock</TableHead>
-                                  <TableHead>Wins</TableHead>
-                                  <TableHead>Losses</TableHead>
-                                  <TableHead className="text-right">Win Rate</TableHead>
-                              </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                              {stockPerformance.length > 0 ? (
-                                  stockPerformance.map((p) => (
-                                      <TableRow key={p.stock}>
-                                          <TableCell className="font-medium">{p.stock}</TableCell>
-                                          <TableCell className="text-primary">{p.wins}</TableCell>
-                                          <TableCell className="text-destructive">{p.losses}</TableCell>
-                                          <TableCell className="text-right font-medium">
-                                              {`${p.wins}/${p.total} (${formatPercent((p.wins / p.total) * 100)})`}
-                                          </TableCell>
-                                      </TableRow>
-                                  ))
-                              ) : (
-                                  <TableRow>
-                                      <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                                          No stock data yet.
-                                      </TableCell>
-                                  </TableRow>
-                              )}
-                          </TableBody>
-                      </Table>
+                    <div className="flex gap-2">
+                        <Input 
+                            placeholder="e.g., TSLA" 
+                            value={newStockInput} 
+                            onChange={(e) => setNewStockInput(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleAddStock()}
+                            className="uppercase"
+                        />
+                        <Button onClick={handleAddStock}><PlusCircle className="mr-2"/> Add</Button>
+                    </div>
+                    <ScrollArea className="h-40 mt-4">
+                        <div className="space-y-2 pr-4">
+                            {sessionStocks.length > 0 ? (
+                                sessionStocks.map(stock => (
+                                    <div key={stock} className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
+                                        <span className="font-medium">{stock}</span>
+                                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleRemoveStock(stock)}>
+                                            <Trash2 className="h-4 w-4 text-destructive"/>
+                                        </Button>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="flex items-center justify-center h-24 text-center text-muted-foreground">
+                                    No stocks added yet.
+                                </div>
+                            )}
+                        </div>
                     </ScrollArea>
                 </CardContent>
               </Card>
             </div>
-          </div>
-          <div className="lg:col-span-3">
-             <Card className="shadow-lg">
-                <CardHeader>
-                    <div className="flex items-center gap-2">
-                        <Lightbulb className="h-6 w-6 text-primary" />
-                        <CardTitle>Smart Suggestion</CardTitle>
-                    </div>
-                    <CardDescription>
-                        Let AI suggest an optimal trade amount. Risk level is set to high.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-4">
-                    {suggestion && (
-                        <div className="p-4 bg-muted/50 rounded-lg space-y-3">
-                            <div>
-                                <Label className="text-xs text-muted-foreground">Suggested Amount</Label>
-                                <p className="text-2xl font-bold text-primary">{formatCurrency(suggestion.suggestedTradeAmount)}</p>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                 <Card className="flex-1 flex flex-col shadow-lg">
+                    <CardHeader>
+                        <CardTitle>Stock Performance</CardTitle>
+                        <CardDescription>
+                            Review your win/loss ratio for each stock.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <ScrollArea className="h-[400px]">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Stock</TableHead>
+                                    <TableHead>Win Rate</TableHead>
+                                    <TableHead>P/L</TableHead>
+                                    <TableHead>Calls (W/L)</TableHead>
+                                    <TableHead>Puts (W/L)</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {stockPerformance.length > 0 ? (
+                                    stockPerformance.map((p) => (
+                                        <TableRow key={p.stock}>
+                                            <TableCell className="font-medium">{p.stock}</TableCell>
+                                            <TableCell className="font-medium">
+                                                {`${p.wins}/${p.total} (${formatPercent((p.wins / p.total) * 100)})`}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant={trades.filter(t => t.stock === p.stock).reduce((acc, t) => acc + t.profit, 0) >= 0 ? "default" : "destructive"}>
+                                                    {formatCurrency(trades.filter(t => t.stock === p.stock).reduce((acc, t) => acc + t.profit, 0))}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell>
+                                                <span className="text-primary">{p.calls.wins}</span> / <span className="text-destructive">{p.calls.losses}</span>
+                                            </TableCell>
+                                            <TableCell>
+                                                <span className="text-primary">{p.puts.wins}</span> / <span className="text-destructive">{p.puts.losses}</span>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                                            No stock data yet.
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                        </ScrollArea>
+                    </CardContent>
+                </Card>
+                 <div className="">
+                    <Card className="shadow-lg">
+                        <CardHeader>
+                            <div className="flex items-center gap-2">
+                                <Lightbulb className="h-6 w-6 text-primary" />
+                                <CardTitle>Smart Suggestion</CardTitle>
                             </div>
-                             <div>
-                                <Label className="text-xs text-muted-foreground">Bankruptcy Risk</Label>
-                                <p className={`font-bold ${suggestion.bankruptcyRisk > 20 ? 'text-destructive' : ''}`}>{formatPercent(suggestion.bankruptcyRisk)}</p>
-                            </div>
-                            <div>
-                                <Label className="text-xs text-muted-foreground">Reasoning</Label>
-                                <p className="text-sm">{suggestion.reasoning}</p>
-                            </div>
-                             <Button onClick={handleApplySuggestion} size="sm" className="w-full">
-                                Apply Suggestion
-                            </Button>
-                        </div>
-                    )}
+                            <CardDescription>
+                                Let AI suggest an optimal trade amount. Risk level is set to high.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="grid gap-4">
+                            {suggestion && (
+                                <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+                                    <div>
+                                        <Label className="text-xs text-muted-foreground">Suggested Amount</Label>
+                                        <p className="text-2xl font-bold text-primary">{formatCurrency(suggestion.suggestedTradeAmount)}</p>
+                                    </div>
+                                    <div>
+                                        <Label className="text-xs text-muted-foreground">Bankruptcy Risk</Label>
+                                        <p className={`font-bold ${suggestion.bankruptcyRisk > 20 ? 'text-destructive' : ''}`}>{formatPercent(suggestion.bankruptcyRisk)}</p>
+                                    </div>
+                                    <div>
+                                        <Label className="text-xs text-muted-foreground">Reasoning</Label>
+                                        <p className="text-sm">{suggestion.reasoning}</p>
+                                    </div>
+                                    <Button onClick={handleApplySuggestion} size="sm" className="w-full">
+                                        Apply Suggestion
+                                    </Button>
+                                </div>
+                            )}
 
-                    {isSuggesting && (
-                         <div className="flex items-center justify-center p-8 bg-muted/50 rounded-lg">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                        </div>
-                    )}
-                </CardContent>
-                <CardFooter>
-                    <Button onClick={handleGetSuggestion} disabled={isSuggesting || isPending} className="w-full">
-                        {isSuggesting ? 'Thinking...' : 'Get Suggestion'}
-                    </Button>
-                </CardFooter>
-            </Card>
+                            {isSuggesting && (
+                                <div className="flex items-center justify-center p-8 bg-muted/50 rounded-lg">
+                                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                                </div>
+                            )}
+                        </CardContent>
+                        <CardFooter>
+                            <Button onClick={handleGetSuggestion} disabled={isSuggesting || isPending} className="w-full">
+                                {isSuggesting ? 'Thinking...' : 'Get Suggestion'}
+                            </Button>
+                        </CardFooter>
+                    </Card>
+                </div>
+            </div>
           </div>
         </div>
       </main>
