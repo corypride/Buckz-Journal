@@ -55,6 +55,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { suggestTradeAmount, SuggestTradeAmountOutput, SuggestTradeAmountInput } from "@/ai/flows/suggest-trade-amount";
 
@@ -626,7 +627,7 @@ export function TradeWiseDashboard() {
                             <TableHead className="w-[120px]">Amount ($)</TableHead>
                             <TableHead className="w-[120px]">Return (%)</TableHead>
                             <TableHead className="w-[150px]">Type</TableHead>
-                            <TableHead className="w-[180px]">Action</TableHead>
+                            <TableHead className="w-[200px]">Action</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -718,24 +719,67 @@ export function TradeWiseDashboard() {
                                 />
                               </TableCell>
                               <TableCell>
-                                  <div className="flex gap-2">
-                                      <Button
-                                        onClick={form.handleSubmit((data) => handleAddTrade(data, "win"))}
-                                        size="sm"
-                                        disabled={isPending}
-                                        className="flex-1"
-                                      >
-                                        <ArrowUpRight className="mr-2 h-4 w-4" /> Log Win
-                                      </Button>
-                                      <Button
-                                        onClick={form.handleSubmit((data) => handleAddTrade(data, "loss"))}
-                                        size="sm"
-                                        variant="destructive"
-                                        disabled={isPending}
-                                        className="flex-1"
-                                      >
-                                        <ArrowDownLeft className="mr-2 h-4 w-4" /> Log Loss
-                                      </Button>
+                                  <div className="flex flex-col gap-2">
+                                      <div className="flex gap-2">
+                                        <Button
+                                          onClick={form.handleSubmit((data) => handleAddTrade(data, "win"))}
+                                          size="sm"
+                                          disabled={isPending}
+                                          className="flex-1"
+                                        >
+                                          <ArrowUpRight className="mr-2 h-4 w-4" /> Log Win
+                                        </Button>
+                                        <Button
+                                          onClick={form.handleSubmit((data) => handleAddTrade(data, "loss"))}
+                                          size="sm"
+                                          variant="destructive"
+                                          disabled={isPending}
+                                          className="flex-1"
+                                        >
+                                          <ArrowDownLeft className="mr-2 h-4 w-4" /> Log Loss
+                                        </Button>
+                                      </div>
+                                      <Popover>
+                                        <PopoverTrigger asChild>
+                                          <Button onClick={handleGetSuggestion} disabled={isSuggesting || isPending} variant="outline" size="sm" className="w-full">
+                                              {isSuggesting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Thinking...</> : <><Lightbulb className="mr-2 h-4 w-4" /> Get Suggestion</>}
+                                          </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-80">
+                                          <div className="grid gap-4">
+                                            <div className="space-y-2">
+                                              <h4 className="font-medium leading-none">Smart Suggestion</h4>
+                                              <p className="text-sm text-muted-foreground">
+                                                AI-powered trade amount suggestion based on your session goals.
+                                              </p>
+                                            </div>
+                                            {isSuggesting && (
+                                                <div className="flex items-center justify-center p-8 rounded-lg">
+                                                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                                                </div>
+                                            )}
+                                            {suggestion && !isSuggesting && (
+                                                <div className="space-y-3">
+                                                    <div>
+                                                        <Label className="text-xs text-muted-foreground">Suggested Amount</Label>
+                                                        <p className="text-2xl font-bold text-primary">{formatCurrency(suggestion.suggestedTradeAmount)}</p>
+                                                    </div>
+                                                    <div>
+                                                        <Label className="text-xs text-muted-foreground">Bankruptcy Risk</Label>
+                                                        <p className={`font-bold ${suggestion.bankruptcyRisk > 20 ? 'text-destructive' : ''}`}>{formatPercent(suggestion.bankruptcyRisk)}</p>
+                                                    </div>
+                                                    <div>
+                                                        <Label className="text-xs text-muted-foreground">Reasoning</Label>
+                                                        <p className="text-sm">{suggestion.reasoning}</p>
+                                                    </div>
+                                                    <Button onClick={handleApplySuggestion} size="sm" className="w-full">
+                                                        Apply Suggestion
+                                                    </Button>
+                                                </div>
+                                            )}
+                                          </div>
+                                        </PopoverContent>
+                                      </Popover>
                                   </div>
                               </TableCell>
                           </TableRow>
@@ -743,53 +787,7 @@ export function TradeWiseDashboard() {
                       </Table>
                     </div>
                   </Form>
-                  
-                  <div className="p-4 border-t mt-4">
-                     <Card className="shadow-none border-dashed">
-                        <CardHeader className="flex flex-row items-center gap-2 p-4">
-                            <Lightbulb className="h-6 w-6 text-primary" />
-                            <div>
-                                <CardTitle className="text-base">Smart Suggestion</CardTitle>
-                                <CardDescription className="text-xs">
-                                    Let AI suggest an optimal trade amount. Risk level is set to high.
-                                </CardDescription>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="p-4 pt-0 grid gap-4">
-                            {suggestion && !isSuggesting && (
-                                <div className="p-4 bg-muted/50 rounded-lg space-y-3">
-                                    <div>
-                                        <Label className="text-xs text-muted-foreground">Suggested Amount</Label>
-                                        <p className="text-2xl font-bold text-primary">{formatCurrency(suggestion.suggestedTradeAmount)}</p>
-                                    </div>
-                                    <div>
-                                        <Label className="text-xs text-muted-foreground">Bankruptcy Risk</Label>
-                                        <p className={`font-bold ${suggestion.bankruptcyRisk > 20 ? 'text-destructive' : ''}`}>{formatPercent(suggestion.bankruptcyRisk)}</p>
-                                    </div>
-                                    <div>
-                                        <Label className="text-xs text-muted-foreground">Reasoning</Label>
-                                        <p className="text-sm">{suggestion.reasoning}</p>
-                                    </div>
-                                    <Button onClick={handleApplySuggestion} size="sm" className="w-full">
-                                        Apply Suggestion
-                                    </Button>
-                                </div>
-                            )}
-
-                            {isSuggesting && (
-                                <div className="flex items-center justify-center p-8 bg-muted/50 rounded-lg">
-                                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                                </div>
-                            )}
-                        </CardContent>
-                        <CardFooter className="p-4 pt-0">
-                            <Button onClick={handleGetSuggestion} disabled={isSuggesting || isPending} className="w-full">
-                                {isSuggesting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Thinking...</> : 'Get Suggestion'}
-                            </Button>
-                        </CardFooter>
-                    </Card>
-                  </div>
-                  
+                                    
                   <ScrollArea className="flex-1 mt-4">
                     <div className="pr-4">
                       <Table>
@@ -961,5 +959,3 @@ export function TradeWiseDashboard() {
     </div>
   );
 }
-
-    
