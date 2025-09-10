@@ -140,7 +140,7 @@ export function TradeWiseDashboard() {
 
   const portfolioValue = useMemo(() => {
     if (trades.length === 0) return initialPortfolio;
-    return trades[0].portfolioAfter;
+    return trades[trades.length - 1].portfolioAfter;
   }, [trades, initialPortfolio]);
   
   const [isPending, startTransition] = useTransition();
@@ -160,8 +160,28 @@ export function TradeWiseDashboard() {
     const losses = trades.length - wins;
     const winRate = trades.length > 0 ? (wins / trades.length) * 100 : 0;
     const totalProfit = trades.reduce((acc, trade) => acc + trade.profit, 0);
-    const tradeHistoryForAI = trades.map(t => ({ stock: t.stock, amount: t.amount, returnPercentage: t.returnPercentage, outcome: t.outcome }));
+    const tradeHistoryForAI = trades.map(t => ({ stock: t.stock, amount: t.amount, returnPercentage: t.returnPercentage, outcome: t.outcome })).reverse();
     return { wins, losses, winRate, totalProfit, tradeHistoryForAI };
+  }, [trades]);
+
+  const stockPerformance = useMemo(() => {
+    const performance: {
+      [key: string]: { wins: number; losses: number; total: number };
+    } = {};
+    trades.forEach((trade) => {
+      if (!performance[trade.stock]) {
+        performance[trade.stock] = { wins: 0, losses: 0, total: 0 };
+      }
+      performance[trade.stock].total++;
+      if (trade.outcome === "win") {
+        performance[trade.stock].wins++;
+      } else {
+        performance[trade.stock].losses++;
+      }
+    });
+    return Object.entries(performance)
+      .map(([stock, data]) => ({ stock, ...data }))
+      .sort((a, b) => b.total - a.total);
   }, [trades]);
 
   const { profitGoalAmount, profitGoalProgress } = useMemo(() => {
@@ -197,7 +217,7 @@ export function TradeWiseDashboard() {
         portfolioAfter: newPortfolioValue,
       };
 
-      setTrades((prev) => [newTrade, ...prev]);
+      setTrades((prev) => [...prev, newTrade]);
       setSuggestion(null);
       // Do not reset the form fully, just clear the outcome-specific fields if needed
       // form.reset({ stock, amount, returnPercentage });
@@ -406,7 +426,7 @@ export function TradeWiseDashboard() {
                     </CardHeader>
                     <CardContent>
                         <div className={`text-2xl font-bold ${totalProfit >= 0 ? 'text-primary' : 'text-destructive'}`}>{formatCurrency(totalProfit)}</div>
-                        <p className="text-xs text-muted-foreground">{formatPercent(totalProfit/initialPortfolio * 100)} return</p>
+                        <p className="text-xs text-muted-foreground">{totalProfit !== 0 ? formatPercent(totalProfit/initialPortfolio * 100) : '0.00%'} return</p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -550,166 +570,208 @@ export function TradeWiseDashboard() {
                 </Card>
             </div>
             
-            <Card className="flex-1 flex flex-col shadow-lg">
-              <CardHeader>
-                <CardTitle>Trade Journal</CardTitle>
-                <CardDescription>
-                  Log new trades and review your session history.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex-1 flex flex-col min-h-0">
-                 <Form {...form}>
-                  <div className="pr-4">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-[120px]">Stock</TableHead>
-                          <TableHead className="w-[120px]">Amount ($)</TableHead>
-                          <TableHead className="w-[140px]">Return (%)</TableHead>
-                          <TableHead className="w-[180px]">Action</TableHead>
-                          <TableHead>Outcome</TableHead>
-                          <TableHead className="text-right">P/L</TableHead>
-                          <TableHead className="text-right">Portfolio</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        <TableRow>
-                            <TableCell>
-                                <FormField
-                                  control={form.control}
-                                  name="stock"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormControl>
-                                        <Input placeholder="e.g., AAPL" {...field} className="text-sm uppercase" />
-                                      </FormControl>
-                                      <FormMessage className="text-xs"/>
-                                    </FormItem>
-                                  )}
-                                />
-                            </TableCell>
-                            <TableCell>
-                                <FormField
-                                  control={form.control}
-                                  name="amount"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormControl>
-                                        <Input type="number" placeholder="e.g., 100" {...field} className="text-sm" />
-                                      </FormControl>
-                                      <FormMessage className="text-xs"/>
-                                    </FormItem>
-                                  )}
-                                />
-                            </TableCell>
-                            <TableCell>
-                                <FormField
-                                  control={form.control}
-                                  name="returnPercentage"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormControl>
-                                        <Input type="number" placeholder="e.g., 85" {...field} className="text-sm" />
-                                      </FormControl>
-                                      <FormMessage className="text-xs"/>
-                                    </FormItem>
-                                  )}
-                                />
-                            </TableCell>
-                            <TableCell colSpan={4}>
-                                <div className="flex gap-2">
-                                    <Button
-                                      onClick={form.handleSubmit((data) => handleAddTrade(data, "win"))}
-                                      size="sm"
-                                      disabled={isPending}
-                                      className="flex-1"
-                                    >
-                                      <ArrowUpRight className="mr-2 h-4 w-4" /> Log Win
-                                    </Button>
-                                    <Button
-                                      onClick={form.handleSubmit((data) => handleAddTrade(data, "loss"))}
-                                      size="sm"
-                                      variant="destructive"
-                                      disabled={isPending}
-                                      className="flex-1"
-                                    >
-                                      <ArrowDownLeft className="mr-2 h-4 w-4" /> Log Loss
-                                    </Button>
-                                </div>
-                            </TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
-                  </div>
-                </Form>
-                <ScrollArea className="flex-1 mt-4">
-                  <div className="pr-4">
-                    <Table>
-                       <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-[80px]">Trade</TableHead>
-                          <TableHead className="w-[120px]">Stock</TableHead>
-                          <TableHead className="w-[140px]">Amount</TableHead>
-                          <TableHead className="w-[180px]">Outcome</TableHead>
-                          <TableHead>P/L</TableHead>
-                          <TableHead className="text-right">Portfolio</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {trades.length > 0 ? (
-                          trades.map((trade) => (
-                            <TableRow key={trade.id}>
-                              <TableCell className="font-medium">
-                                #{trades.length - trades.indexOf(trade)}
-                              </TableCell>
-                               <TableCell className="font-medium">
-                                {trade.stock}
-                              </TableCell>
-                              <TableCell className="text-left">
-                                {formatCurrency(trade.amount)}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <Card className="flex-1 flex flex-col shadow-lg">
+                <CardHeader>
+                  <CardTitle>Trade Journal</CardTitle>
+                  <CardDescription>
+                    Log new trades and review your session history.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex-1 flex flex-col min-h-0">
+                   <Form {...form}>
+                    <div className="pr-4">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-[120px]">Stock</TableHead>
+                            <TableHead className="w-[120px]">Amount ($)</TableHead>
+                            <TableHead className="w-[140px]">Return (%)</TableHead>
+                            <TableHead className="w-[180px]">Action</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          <TableRow>
+                              <TableCell>
+                                  <FormField
+                                    control={form.control}
+                                    name="stock"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormControl>
+                                          <Input placeholder="e.g., AAPL" {...field} className="text-sm uppercase" />
+                                        </FormControl>
+                                        <FormMessage className="text-xs"/>
+                                      </FormItem>
+                                    )}
+                                  />
                               </TableCell>
                               <TableCell>
-                                {trade.outcome === "win" ? (
-                                  <span className="flex items-center gap-2 text-primary">
-                                    <ArrowUpRight className="h-4 w-4" /> Win
-                                  </span>
-                                ) : (
-                                  <span className="flex items-center gap-2 text-destructive">
-                                    <ArrowDownLeft className="h-4 w-4" /> Loss
-                                  </span>
-                                )}
+                                  <FormField
+                                    control={form.control}
+                                    name="amount"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormControl>
+                                          <Input type="number" placeholder="e.g., 100" {...field} className="text-sm" />
+                                        </FormControl>
+                                        <FormMessage className="text-xs"/>
+                                      </FormItem>
+                                    )}
+                                  />
                               </TableCell>
-                              
+                              <TableCell>
+                                  <FormField
+                                    control={form.control}
+                                    name="returnPercentage"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormControl>
+                                          <Input type="number" placeholder="e.g., 85" {...field} className="text-sm" />
+                                        </FormControl>
+                                        <FormMessage className="text-xs"/>
+                                      </FormItem>
+                                    )}
+                                  />
+                              </TableCell>
+                              <TableCell>
+                                  <div className="flex gap-2">
+                                      <Button
+                                        onClick={form.handleSubmit((data) => handleAddTrade(data, "win"))}
+                                        size="sm"
+                                        disabled={isPending}
+                                        className="flex-1"
+                                      >
+                                        <ArrowUpRight className="mr-2 h-4 w-4" /> Log Win
+                                      </Button>
+                                      <Button
+                                        onClick={form.handleSubmit((data) => handleAddTrade(data, "loss"))}
+                                        size="sm"
+                                        variant="destructive"
+                                        disabled={isPending}
+                                        className="flex-1"
+                                      >
+                                        <ArrowDownLeft className="mr-2 h-4 w-4" /> Log Loss
+                                      </Button>
+                                  </div>
+                              </TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </Form>
+                  <ScrollArea className="flex-1 mt-4">
+                    <div className="pr-4">
+                      <Table>
+                         <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-[80px]">Trade</TableHead>
+                            <TableHead className="w-[120px]">Stock</TableHead>
+                            <TableHead className="w-[140px]">Amount</TableHead>
+                            <TableHead className="w-[180px]">Outcome</TableHead>
+                            <TableHead>P/L</TableHead>
+                            <TableHead className="text-right">Portfolio</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {trades.length > 0 ? (
+                            [...trades].reverse().map((trade) => (
+                              <TableRow key={trade.id}>
+                                <TableCell className="font-medium">
+                                  #{trade.id}
+                                </TableCell>
+                                 <TableCell className="font-medium">
+                                  {trade.stock}
+                                </TableCell>
+                                <TableCell className="text-left">
+                                  {formatCurrency(trade.amount)}
+                                </TableCell>
+                                <TableCell>
+                                  {trade.outcome === "win" ? (
+                                    <span className="flex items-center gap-2 text-primary">
+                                      <ArrowUpRight className="h-4 w-4" /> Win
+                                    </span>
+                                  ) : (
+                                    <span className="flex items-center gap-2 text-destructive">
+                                      <ArrowDownLeft className="h-4 w-4" /> Loss
+                                    </span>
+                                  )}
+                                </TableCell>
+                                
+                                <TableCell
+                                  className={`text-left font-semibold ${
+                                    trade.profit > 0
+                                      ? "text-primary"
+                                      : "text-destructive"
+                                  }`}
+                                >
+                                  {formatCurrency(trade.profit)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {formatCurrency(trade.portfolioAfter)}
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          ) : (
+                            <TableRow>
                               <TableCell
-                                className={`text-left font-semibold ${
-                                  trade.profit > 0
-                                    ? "text-primary"
-                                    : "text-destructive"
-                                }`}
+                                colSpan={6}
+                                className="h-24 text-center text-muted-foreground"
                               >
-                                {formatCurrency(trade.profit)}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {formatCurrency(trade.portfolioAfter)}
+                                No trades logged yet.
                               </TableCell>
                             </TableRow>
-                          ))
-                        ) : (
-                          <TableRow>
-                            <TableCell
-                              colSpan={6}
-                              className="h-24 text-center text-muted-foreground"
-                            >
-                              No trades logged yet.
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+
+              <Card className="flex-1 flex flex-col shadow-lg">
+                <CardHeader>
+                    <CardTitle>Stock Performance</CardTitle>
+                    <CardDescription>
+                        Review your win/loss ratio for each stock.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <ScrollArea className="h-[400px]">
+                      <Table>
+                          <TableHeader>
+                              <TableRow>
+                                  <TableHead>Stock</TableHead>
+                                  <TableHead>Wins</TableHead>
+                                  <TableHead>Losses</TableHead>
+                                  <TableHead className="text-right">Win Rate</TableHead>
+                              </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                              {stockPerformance.length > 0 ? (
+                                  stockPerformance.map((p) => (
+                                      <TableRow key={p.stock}>
+                                          <TableCell className="font-medium">{p.stock}</TableCell>
+                                          <TableCell className="text-primary">{p.wins}</TableCell>
+                                          <TableCell className="text-destructive">{p.losses}</TableCell>
+                                          <TableCell className="text-right font-medium">
+                                              {`${p.wins}/${p.total} (${formatPercent((p.wins / p.total) * 100)})`}
+                                          </TableCell>
+                                      </TableRow>
+                                  ))
+                              ) : (
+                                  <TableRow>
+                                      <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                                          No stock data yet.
+                                      </TableCell>
+                                  </TableRow>
+                              )}
+                          </TableBody>
+                      </Table>
+                    </ScrollArea>
+                </CardContent>
+              </Card>
+            </div>
           </div>
           <div className="lg:col-span-3">
              <Card className="shadow-lg">
