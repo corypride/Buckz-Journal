@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import { useState, useMemo, useTransition, useRef, useEffect } from "react";
@@ -61,6 +59,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { suggestTradeAmount, SuggestTradeAmountOutput, SuggestTradeAmountInput } from "@/ai/flows/suggest-trade-amount";
+import { Combobox } from "@/components/ui/combobox";
 
 import {
   Scale,
@@ -125,28 +124,27 @@ const formatPercent = (value: number) =>
   }).format(value / 100);
 
 const defaultStocks = [
-    "AED/CNY OTC",
-    "AUD/CAD OTC",
-    "AUD/NZD OTC",
-    "CAD/CHF OTC",
-    "EUR/HUF OTC",
-    "AMERICAN EXPRESS OTC",
-    "APPLE OTC",
-    "CHF/JPY OTC",
-    "CHF/NOK OTC",
-    "EUR/TRY OTC",
-    "GBP/USD OTC",
-    "MCDONALD'S OTC",
-    "USD/CLP OTC",
-    "YER/USD OTC",
-    "AMAZON OTC",
-    "BHD/CNY OTC",
-    "EUR/GBP OTC",
-    "EUR/JPY OTC",
-    "EUR/USD OTC",
-    "LBP/USD OTC",
-    "USD/JPY OTC",
-    "USD/MYR OTC",
+  "AED/CNY OTC",
+  "AUD/CAD OTC",
+  "CAD/CHF OTC",
+  "EUR/HUF OTC",
+  "GBP/USD OTC",
+  "AMERICAN EXPRESS OTC",
+  "AUD/NZD OTC",
+  "CHF/JPY OTC",
+  "USD/CLP OTC",
+  "MCDONALD'S OTC",
+  "CHF/NOK OTC",
+  "YER/USD OTC",
+  "USD/MYR OTC",
+  "AMAZON OTC",
+  "EUR/TRY OTC",
+  "LBP/USD OTC",
+  "EUR/JPY OTC",
+  "USD/JPY OTC",
+  "EUR/GBP OTC",
+  "BHD/CNY OTC",
+  "EUR/USD OTC",
 ];
 
 export function TradeWiseDashboard() {
@@ -475,6 +473,10 @@ export function TradeWiseDashboard() {
     }
 };
 
+  const stockOptions = useMemo(() => {
+    return sessionStocks.map(stock => ({ value: stock.toLowerCase(), label: stock }));
+  }, [sessionStocks]);
+
   return (
     <div className="flex flex-col min-h-dvh bg-background text-foreground font-sans">
       <header className="flex items-center justify-between p-4 md:p-6 border-b border-white/10">
@@ -712,7 +714,7 @@ export function TradeWiseDashboard() {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="w-[120px]">Stock</TableHead>
+                            <TableHead className="w-[180px]">Stock</TableHead>
                             <TableHead className="w-[120px]">Amount ($)</TableHead>
                             <TableHead className="w-[120px]">Return (%)</TableHead>
                             <TableHead className="w-[150px]">Type</TableHead>
@@ -728,16 +730,14 @@ export function TradeWiseDashboard() {
                                     render={({ field }) => (
                                       <FormItem>
                                         <FormControl>
-                                           <Select onValueChange={field.onChange} value={field.value} disabled={sessionStocks.length === 0}>
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Select Stock" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {sessionStocks.map(stock => (
-                                                        <SelectItem key={stock} value={stock}>{stock}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
+                                            <Combobox
+                                                options={stockOptions}
+                                                value={field.value}
+                                                onChange={(value) => field.onChange(value.toUpperCase())}
+                                                placeholder="Select stock..."
+                                                searchPlaceholder="Search stocks..."
+                                                emptyPlaceholder="No stocks found."
+                                            />
                                         </FormControl>
                                         <FormMessage className="text-xs"/>
                                       </FormItem>
@@ -1070,5 +1070,3 @@ export function TradeWiseDashboard() {
     </div>
   );
 }
-
-      
