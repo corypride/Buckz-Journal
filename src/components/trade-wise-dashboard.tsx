@@ -124,6 +124,31 @@ const formatPercent = (value: number) =>
     maximumFractionDigits: 2,
   }).format(value / 100);
 
+const defaultStocks = [
+    "APPLE OTC",
+    "GBP/USD OTC",
+    "AUD/NZD OTC",
+    "AED/CNY OTC",
+    "CHF/JPY OTC",
+    "USD/MYR OTC",
+    "EUR/JPY OTC",
+    "AUD/CAD OTC",
+    "LBP/USD OTC",
+    "AMERICAN EXPRESS OTC",
+    "USD/CLP OTC",
+    "AMAZON OTC",
+    "YER/USD OTC",
+    "CAD/CHF OTC",
+    "EUR/HUF OTC",
+    "USD/JPY OTC",
+    "MCDONALD'S OTC",
+    "EUR/TRY OTC",
+    "CHF/NOK OTC",
+    "EUR/GBP OTC",
+    "EUR/USD OTC",
+    "BHD/CNY OTC",
+];
+
 export function TradeWiseDashboard() {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [initialPortfolio, setInitialPortfolio] = useState(DEFAULT_INITIAL_PORTFOLIO);
@@ -149,7 +174,7 @@ export function TradeWiseDashboard() {
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [suggestionPopoverOpen, setSuggestionPopoverOpen] = useState(false);
 
-  const [sessionStocks, setSessionStocks] = useState<string[]>([]);
+  const [sessionStocks, setSessionStocks] = useState<string[]>(defaultStocks);
   const [newStockInput, setNewStockInput] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -217,7 +242,6 @@ export function TradeWiseDashboard() {
 
   const handleGetSuggestion = async () => {
     const stock = form.getValues("stock");
-
     const stockHistory = tradeHistoryForAI.filter(t => t.stock === stock);
 
     setIsSuggesting(true);
@@ -230,8 +254,6 @@ export function TradeWiseDashboard() {
         profitGoal: profitGoalAmount,
         targetWinRate,
         tradesRemaining: sessionGoal - trades.length > 0 ? sessionGoal - trades.length : 1,
-        selectedStock: stock || undefined,
-        selectedStockHistory: stockHistory.length > 0 ? stockHistory as any : undefined,
     };
     
     try {
@@ -353,7 +375,7 @@ export function TradeWiseDashboard() {
   const handleReset = () => {
     startTransition(() => {
       setTrades([]);
-      setSessionStocks([]);
+      setSessionStocks(defaultStocks);
       setNewStockInput("");
       setInitialPortfolio(DEFAULT_INITIAL_PORTFOLIO);
       setEditingInitialPortfolioValue(String(DEFAULT_INITIAL_PORTFOLIO));
