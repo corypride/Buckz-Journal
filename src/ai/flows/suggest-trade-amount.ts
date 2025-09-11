@@ -1,4 +1,3 @@
-
 'use server';
 
 /**
@@ -47,35 +46,32 @@ const prompt = ai.definePrompt({
   name: 'suggestTradeAmountPrompt',
   input: {schema: SuggestTradeAmountInputSchema},
   output: {schema: SuggestTradeAmountOutputSchema},
-  prompt: `You are an expert financial advisor specializing in risk management for traders.
+  prompt: `You are an expert financial advisor specializing in risk management for traders. You employ a sophisticated trading strategy similar to the Labouchère and Paroli systems, but adapted for modern trading. Your goal is to help the user reach their profit goal within the specified number of trades.
 
-You will analyze the trader's past trade history, current portfolio value, risk level, and session goals to suggest an optimal trade amount.
+**Your Strategy:**
+- **After a loss:** Increase the next trade amount to recover the previous loss plus a small profit. This is a recovery phase.
+- **After a win:** Decrease the next trade amount to a more conservative baseline to protect profits. This is a consolidation phase.
+- **First Trade:** If there is no trade history for the session, suggest a conservative opening trade amount, typically 1-2% of the portfolio, adjusted for the user's risk level.
+- **Goal-Oriented:** Your suggestions must always consider the user's Profit Goal and the number of Trades Remaining. If the user is falling behind, the suggested trade size may need to be more aggressive. If they are ahead, it should be more conservative.
+- **Risk Management:** You must always calculate the risk of bankruptcy with the suggested trade amount. If the risk is over 20%, you must warn the user and explain why the risk is high, even if the strategy calls for it.
 
-Consider the following factors:
-
-*   **Trade History:** Analyze the trader's past trades to identify patterns and calculate their win rate and average return percentage. Pay special attention to the outcome of the very first trade in the session as it can set the tone.
-*   **Current Portfolio Value:** Take into account the current value of the trader's portfolio to determine how much capital they can afford to risk.
-*   **Risk Level:** Adjust the suggested trade amount based on the trader's selected risk level. A low-risk level should result in a more conservative trade amount, while a high-risk level can result in a more aggressive trade amount.
-*   **Session Goals:** The primary objective is to reach the Profit Goal and Target Win Rate within the remaining trades. The suggested amount should be ambitious enough to make progress but not so risky that it jeopardizes the entire portfolio.
-*   **Bankruptcy Risk:** Calculate the probability of bankrupting the portfolio with the suggested trade amount. Alert the user if the probability is higher than 20%.
-
-User's Data:
+**User's Data:**
 - Current Portfolio Value: {{currentPortfolioValue}}
 - Risk Level: {{riskLevel}}
 - Profit Goal: {{profitGoal}}
 - Target Win Rate: {{targetWinRate}}
 - Trades Remaining in Session: {{tradesRemaining}}
 
-Trade History:
+**Trade History (most recent first):**
 {{#if tradeHistory.length}}
   {{#each tradeHistory}}
     - Stock: {{stock}}, Type: {{tradeType}}, Amount: {{amount}}, Return Percentage: {{returnPercentage}}, Outcome: {{outcome}}
   {{/each}}
 {{else}}
-  No trades in this session yet. The first trade is a crucial benchmark. Suggest a conservative starting amount.
+  No trades in this session yet. The first trade is crucial. Suggest a conservative starting amount based on the portfolio and risk level.
 {{/if}}
 
-Based on this information, suggest an optimal trade amount that maximizes the chances of reaching the session goals while managing risk according to the selected level. Provide clear reasoning for your suggestion and the calculated bankruptcy risk.
+Based on this information and your progressive strategy, suggest an optimal trade amount. Provide clear reasoning for your suggestion, explaining how it fits into the strategy and accounts for the user's goals and recent performance.
 
 Output in JSON format:
 {{outputSchema}}`,
@@ -92,5 +88,4 @@ const suggestTradeAmountFlow = ai.defineFlow(
     return output!;
   }
 );
-
     
