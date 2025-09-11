@@ -1,7 +1,8 @@
 
+
 "use client";
 
-import { useState, useMemo, useTransition, useRef } from "react";
+import { useState, useMemo, useTransition, useRef, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -146,6 +147,7 @@ export function TradeWiseDashboard() {
   const [riskLevel, setRiskLevel] = useState<"low" | "medium" | "high">("medium");
   const [suggestion, setSuggestion] = useState<SuggestTradeAmountOutput | null>(null);
   const [isSuggesting, setIsSuggesting] = useState(false);
+  const [suggestionPopoverOpen, setSuggestionPopoverOpen] = useState(false);
 
   const [sessionStocks, setSessionStocks] = useState<string[]>([]);
   const [newStockInput, setNewStockInput] = useState("");
@@ -212,6 +214,47 @@ export function TradeWiseDashboard() {
   const targetWinRateProgress = useMemo(() => {
       return targetWinRate > 0 ? (winRate / targetWinRate) * 100 : 0;
   }, [winRate, targetWinRate]);
+
+  const handleGetSuggestion = async () => {
+    const stock = form.getValues("stock");
+
+    const stockHistory = tradeHistoryForAI.filter(t => t.stock === stock);
+
+    setIsSuggesting(true);
+    setSuggestion(null);
+
+    const input: SuggestTradeAmountInput = {
+        tradeHistory: tradeHistoryForAI as any, 
+        currentPortfolioValue: portfolioValue,
+        riskLevel,
+        profitGoal: profitGoalAmount,
+        targetWinRate,
+        tradesRemaining: sessionGoal - trades.length > 0 ? sessionGoal - trades.length : 1,
+        selectedStock: stock || undefined,
+        selectedStockHistory: stockHistory.length > 0 ? stockHistory as any : undefined,
+    };
+    
+    try {
+        const result = await suggestTradeAmount(input);
+        setSuggestion(result);
+    } catch (error) {
+        console.error("Error getting suggestion:", error);
+        toast({
+            variant: "destructive",
+            title: "Suggestion Failed",
+            description: "Could not get a suggestion from the AI. Please try again.",
+        });
+    } finally {
+        setIsSuggesting(false);
+    }
+  };
+
+  useEffect(() => {
+    if (trades.length === 1) {
+      setSuggestionPopoverOpen(true);
+      handleGetSuggestion();
+    }
+  }, [trades]);
 
   const handleAddTrade = (
     values: z.infer<typeof tradeSchema>,
@@ -332,37 +375,10 @@ export function TradeWiseDashboard() {
     });
   };
 
-  const handleGetSuggestion = async () => {
-    setIsSuggesting(true);
-    setSuggestion(null);
-
-    const input: SuggestTradeAmountInput = {
-        tradeHistory: tradeHistoryForAI as any, // Cast because tradeType is added
-        currentPortfolioValue: portfolioValue,
-        riskLevel,
-        profitGoal: profitGoalAmount,
-        targetWinRate,
-        tradesRemaining: sessionGoal - trades.length > 0 ? sessionGoal - trades.length : 1,
-    };
-    
-    try {
-        const result = await suggestTradeAmount(input);
-        setSuggestion(result);
-    } catch (error) {
-        console.error("Error getting suggestion:", error);
-        toast({
-            variant: "destructive",
-            title: "Suggestion Failed",
-            description: "Could not get a suggestion from the AI. Please try again.",
-        });
-    } finally {
-        setIsSuggesting(false);
-    }
-  };
-
   const handleApplySuggestion = () => {
     if (suggestion) {
         form.setValue("amount", suggestion.suggestedTradeAmount);
+        setSuggestionPopoverOpen(false);
     }
   };
 
@@ -790,7 +806,7 @@ export function TradeWiseDashboard() {
                                           <ArrowDownLeft className="mr-2 h-4 w-4" /> Log Loss
                                         </Button>
                                       </div>
-                                      <Popover>
+                                      <Popover open={suggestionPopoverOpen} onOpenChange={setSuggestionPopoverOpen}>
                                         <PopoverTrigger asChild>
                                           <Button onClick={handleGetSuggestion} disabled={isSuggesting || isPending} variant="outline" size="sm" className="w-full">
                                               {isSuggesting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Thinking...</> : <><Lightbulb className="mr-2 h-4 w-4" /> Get Suggestion</>}
@@ -1032,3 +1048,5 @@ export function TradeWiseDashboard() {
     </div>
   );
 }
+
+      
