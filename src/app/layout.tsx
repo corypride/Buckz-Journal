@@ -3,7 +3,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
-  title: 'TradeWise',
+  title: 'Bucks Bible',
   description: 'A smart risk management tool for traders.',
 };
 

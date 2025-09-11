@@ -62,7 +62,7 @@ import { suggestTradeAmount, SuggestTradeAmountOutput, SuggestTradeAmountInput }
 import { Combobox } from "@/components/ui/combobox";
 
 import {
-  Scale,
+  BookOpenCheck,
   ArrowUpRight,
   ArrowDownLeft,
   RefreshCw,
@@ -80,6 +80,7 @@ import {
   PlusCircle,
   Trash2,
   Upload,
+  Star,
 } from "lucide-react";
 
 type Trade = {
@@ -170,11 +171,11 @@ export function TradeWiseDashboard() {
   const [riskLevel, setRiskLevel] = useState<"low" | "medium" | "high">("medium");
   const [suggestion, setSuggestion] = useState<SuggestTradeAmountOutput | null>(null);
   const [isSuggesting, setIsSuggesting] = useState(false);
-  const [suggestionPopoverOpen, setSuggestionPopoverOpen] = useState(false);
-
+  
   const [sessionStocks, setSessionStocks] = useState<string[]>(defaultStocks);
   const [newStockInput, setNewStockInput] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [favoritedStocks, setFavoritedStocks] = useState<string[]>([]);
 
 
   const portfolioValue = useMemo(() => {
@@ -245,6 +246,10 @@ export function TradeWiseDashboard() {
     setIsSuggesting(true);
     setSuggestion(null);
 
+    const stockPerf = stockPerformance.find(p => p.stock === stock);
+    const stockWinRate = stockPerf ? (stockPerf.wins / stockPerf.total) * 100 : undefined;
+
+
     const input: SuggestTradeAmountInput = {
         tradeHistory: tradeHistoryForAI as any, 
         currentPortfolioValue: portfolioValue,
@@ -252,6 +257,8 @@ export function TradeWiseDashboard() {
         profitGoal: profitGoalAmount,
         targetWinRate,
         tradesRemaining: sessionGoal - trades.length > 0 ? sessionGoal - trades.length : 1,
+        selectedStock: stock,
+        selectedStockWinRate: stockWinRate,
     };
     
     try {
@@ -271,7 +278,6 @@ export function TradeWiseDashboard() {
 
   useEffect(() => {
     if (trades.length === 1) {
-      setSuggestionPopoverOpen(true);
       handleGetSuggestion();
     }
   }, [trades]);
@@ -392,13 +398,13 @@ export function TradeWiseDashboard() {
       form.reset({ stock: "", amount: "" as any, returnPercentage: "" as any, tradeType: "call" });
       setSuggestion(null);
       setRiskLevel("medium");
+      setFavoritedStocks([]);
     });
   };
 
   const handleApplySuggestion = () => {
     if (suggestion) {
         form.setValue("amount", suggestion.suggestedTradeAmount);
-        setSuggestionPopoverOpen(false);
     }
   };
 
@@ -421,6 +427,7 @@ export function TradeWiseDashboard() {
 
   const handleRemoveStock = (stockToRemove: string) => {
       setSessionStocks(prev => prev.filter(s => s !== stockToRemove));
+      setFavoritedStocks(prev => prev.filter(s => s !== stockToRemove));
       if (form.getValues("stock") === stockToRemove) {
           form.setValue("stock", "");
       }
@@ -467,23 +474,32 @@ export function TradeWiseDashboard() {
     };
     reader.readAsArrayBuffer(file);
     
-    // Reset file input
     if(fileInputRef.current) {
         fileInputRef.current.value = "";
     }
 };
 
+  const toggleFavorite = (stockToToggle: string) => {
+    setFavoritedStocks(prev => 
+        prev.includes(stockToToggle) 
+        ? prev.filter(s => s !== stockToToggle)
+        : [...prev, stockToToggle]
+    );
+  };
+
   const stockOptions = useMemo(() => {
-    return sessionStocks.map(stock => ({ value: stock.toLowerCase(), label: stock }));
-  }, [sessionStocks]);
+    const list = favoritedStocks.length > 0 ? favoritedStocks : sessionStocks;
+    return list.map(stock => ({ value: stock.toLowerCase(), label: stock }));
+  }, [sessionStocks, favoritedStocks]);
+
 
   return (
     <div className="flex flex-col min-h-dvh bg-background text-foreground font-sans">
       <header className="flex items-center justify-between p-4 md:p-6 border-b border-white/10">
         <div className="flex items-center gap-3">
-          <Scale className="w-8 h-8 text-primary" />
+          <BookOpenCheck className="w-8 h-8 text-primary" />
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-50">
-            TradeWise
+            Bucks Bible
           </h1>
         </div>
         <AlertDialog>
@@ -808,67 +824,24 @@ export function TradeWiseDashboard() {
                                 />
                               </TableCell>
                               <TableCell>
-                                  <div className="flex flex-col gap-2">
-                                      <div className="flex gap-2">
-                                        <Button
-                                          onClick={form.handleSubmit((data) => handleAddTrade(data, "win"))}
-                                          size="sm"
-                                          disabled={isPending}
-                                          className="flex-1"
-                                        >
-                                          <ArrowUpRight className="mr-2 h-4 w-4" /> Log Win
-                                        </Button>
-                                        <Button
-                                          onClick={form.handleSubmit((data) => handleAddTrade(data, "loss"))}
-                                          size="sm"
-                                          variant="destructive"
-                                          disabled={isPending}
-                                          className="flex-1"
-                                        >
-                                          <ArrowDownLeft className="mr-2 h-4 w-4" /> Log Loss
-                                        </Button>
-                                      </div>
-                                      <Popover open={suggestionPopoverOpen} onOpenChange={setSuggestionPopoverOpen}>
-                                        <PopoverTrigger asChild>
-                                          <Button onClick={handleGetSuggestion} disabled={isSuggesting || isPending} variant="outline" size="sm" className="w-full">
-                                              {isSuggesting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Thinking...</> : <><Lightbulb className="mr-2 h-4 w-4" /> Get Suggestion</>}
-                                          </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-80">
-                                          <div className="grid gap-4">
-                                            <div className="space-y-2">
-                                              <h4 className="font-medium leading-none">Smart Suggestion</h4>
-                                              <p className="text-sm text-muted-foreground">
-                                                AI-powered trade amount suggestion based on your session goals.
-                                              </p>
-                                            </div>
-                                            {isSuggesting && (
-                                                <div className="flex items-center justify-center p-8 rounded-lg">
-                                                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                                                </div>
-                                            )}
-                                            {suggestion && !isSuggesting && (
-                                                <div className="space-y-3">
-                                                    <div>
-                                                        <Label className="text-xs text-muted-foreground">Suggested Amount</Label>
-                                                        <p className="text-2xl font-bold text-primary">{formatCurrency(suggestion.suggestedTradeAmount)}</p>
-                                                    </div>
-                                                    <div>
-                                                        <Label className="text-xs text-muted-foreground">Bankruptcy Risk</Label>
-                                                        <p className={`font-bold ${suggestion.bankruptcyRisk > 20 ? 'text-destructive' : ''}`}>{formatPercent(suggestion.bankruptcyRisk)}</p>
-                                                    </div>
-                                                    <div>
-                                                        <Label className="text-xs text-muted-foreground">Reasoning</Label>
-                                                        <p className="text-sm">{suggestion.reasoning}</p>
-                                                    </div>
-                                                    <Button onClick={handleApplySuggestion} size="sm" className="w-full">
-                                                        Apply Suggestion
-                                                    </Button>
-                                                </div>
-                                            )}
-                                          </div>
-                                        </PopoverContent>
-                                      </Popover>
+                                  <div className="flex gap-2">
+                                    <Button
+                                      onClick={form.handleSubmit((data) => handleAddTrade(data, "win"))}
+                                      size="sm"
+                                      disabled={isPending}
+                                      className="flex-1"
+                                    >
+                                      <ArrowUpRight className="mr-2 h-4 w-4" /> Log Win
+                                    </Button>
+                                    <Button
+                                      onClick={form.handleSubmit((data) => handleAddTrade(data, "loss"))}
+                                      size="sm"
+                                      variant="destructive"
+                                      disabled={isPending}
+                                      className="flex-1"
+                                    >
+                                      <ArrowDownLeft className="mr-2 h-4 w-4" /> Log Loss
+                                    </Button>
                                   </div>
                               </TableCell>
                           </TableRow>
@@ -876,6 +849,50 @@ export function TradeWiseDashboard() {
                       </Table>
                     </div>
                   </Form>
+                  
+                  <div className="px-4 mt-4">
+                    <Popover>
+                        <PopoverTrigger asChild>
+                          <Button disabled={isSuggesting || isPending} variant="outline" size="sm" className="w-full">
+                              {isSuggesting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Thinking...</> : <><Lightbulb className="mr-2 h-4 w-4" /> Get Suggestion</>}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-96">
+                          <div className="grid gap-4">
+                            <div className="space-y-2">
+                              <h4 className="font-medium leading-none">Smart Suggestion</h4>
+                              <p className="text-sm text-muted-foreground">
+                                AI-powered trade amount suggestion based on your session goals.
+                              </p>
+                            </div>
+                            {isSuggesting && (
+                                <div className="flex items-center justify-center p-8 rounded-lg">
+                                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                                </div>
+                            )}
+                            {suggestion && !isSuggesting && (
+                                <div className="space-y-3">
+                                    <div>
+                                        <Label className="text-xs text-muted-foreground">Suggested Amount</Label>
+                                        <p className="text-2xl font-bold text-primary">{formatCurrency(suggestion.suggestedTradeAmount)}</p>
+                                    </div>
+                                    <div>
+                                        <Label className="text-xs text-muted-foreground">Bankruptcy Risk</Label>
+                                        <p className={`font-bold ${suggestion.bankruptcyRisk > 20 ? 'text-destructive' : ''}`}>{formatPercent(suggestion.bankruptcyRisk)}</p>
+                                    </div>
+                                    <div>
+                                        <Label className="text-xs text-muted-foreground">Reasoning</Label>
+                                        <p className="text-sm">{suggestion.reasoning}</p>
+                                    </div>
+                                    <Button onClick={handleApplySuggestion} size="sm" className="w-full">
+                                        Apply Suggestion
+                                    </Button>
+                                </div>
+                            )}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                  </div>
                                     
                   <ScrollArea className="flex-1 mt-4">
                     <div className="pr-4">
@@ -981,9 +998,14 @@ export function TradeWiseDashboard() {
                                   sessionStocks.map(stock => (
                                       <div key={stock} className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
                                           <span className="font-medium">{stock}</span>
-                                          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleRemoveStock(stock)}>
-                                              <Trash2 className="h-4 w-4 text-destructive"/>
-                                          </Button>
+                                          <div className="flex items-center">
+                                            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => toggleFavorite(stock)}>
+                                                <Star className={`h-4 w-4 ${favoritedStocks.includes(stock) ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground'}`}/>
+                                            </Button>
+                                            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleRemoveStock(stock)}>
+                                                <Trash2 className="h-4 w-4 text-destructive"/>
+                                            </Button>
+                                          </div>
                                       </div>
                                   ))
                               ) : (
