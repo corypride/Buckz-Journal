@@ -58,7 +58,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { suggestTradeAmount, SuggestTradeAmountOutput, SuggestTradeAmountInput } from "@/ai/flows/suggest-trade-amount";
+import { suggestTradeAmount, SuggestTradeAmountOutput } from "@/ai/flows/suggest-trade-amount";
 import { Combobox } from "@/components/ui/combobox";
 
 import {
@@ -173,7 +173,7 @@ export function TradeWiseDashboard() {
   const [isSuggesting, setIsSuggesting] = useState(false);
   
   const [sessionStocks, setSessionStocks] = useState<string[]>(defaultStocks);
-  const [newStockInput, setNewStockInput] = useState("");
+  const [stockFilter, setStockFilter] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [favoritedStocks, setFavoritedStocks] = useState<string[]>([]);
 
@@ -240,29 +240,20 @@ export function TradeWiseDashboard() {
   }, [winRate, targetWinRate]);
 
   const handleGetSuggestion = async () => {
-    const stock = form.getValues("stock");
-    const stockHistory = tradeHistoryForAI.filter(t => t.stock === stock);
-
     setIsSuggesting(true);
     setSuggestion(null);
 
-    const stockPerf = stockPerformance.find(p => p.stock === stock);
-    const stockWinRate = stockPerf ? (stockPerf.wins / stockPerf.total) * 100 : undefined;
-
-
-    const input: SuggestTradeAmountInput = {
-        tradeHistory: tradeHistoryForAI as any, 
+    const input = {
+        tradeHistory: tradeHistoryForAI,
         currentPortfolioValue: portfolioValue,
         riskLevel,
         profitGoal: profitGoalAmount,
         targetWinRate,
         tradesRemaining: sessionGoal - trades.length > 0 ? sessionGoal - trades.length : 1,
-        selectedStock: stock,
-        selectedStockWinRate: stockWinRate,
     };
     
     try {
-        const result = await suggestTradeAmount(input);
+        const result = await suggestTradeAmount(input as any);
         setSuggestion(result);
     } catch (error) {
         console.error("Error getting suggestion:", error);
@@ -280,7 +271,7 @@ export function TradeWiseDashboard() {
     if (trades.length === 1) {
       handleGetSuggestion();
     }
-  }, [trades]);
+  }, [trades, handleGetSuggestion]);
 
   const handleAddTrade = (
     values: z.infer<typeof tradeSchema>,
@@ -380,7 +371,7 @@ export function TradeWiseDashboard() {
     startTransition(() => {
       setTrades([]);
       setSessionStocks(defaultStocks);
-      setNewStockInput("");
+      setStockFilter("");
       setInitialPortfolio(DEFAULT_INITIAL_PORTFOLIO);
       setEditingInitialPortfolioValue(String(DEFAULT_INITIAL_PORTFOLIO));
       setIsEditingInitialPortfolio(false);
@@ -409,13 +400,10 @@ export function TradeWiseDashboard() {
   };
 
   const handleAddStock = () => {
-    const stockToAdd = newStockInput.trim().toUpperCase();
+    const stockToAdd = stockFilter.trim().toUpperCase();
     if (stockToAdd && !sessionStocks.includes(stockToAdd)) {
-        setSessionStocks(prev => [...prev, stockToAdd]);
-        setNewStockInput("");
-        if (sessionStocks.length === 0) {
-            form.setValue("stock", stockToAdd);
-        }
+        setSessionStocks(prev => [stockToAdd, ...prev]);
+        setStockFilter("");
     } else if (sessionStocks.includes(stockToAdd)) {
         toast({
             variant: "destructive",
@@ -491,6 +479,15 @@ export function TradeWiseDashboard() {
     const list = favoritedStocks.length > 0 ? favoritedStocks : sessionStocks;
     return list.map(stock => ({ value: stock.toLowerCase(), label: stock }));
   }, [sessionStocks, favoritedStocks]);
+
+  const filteredSessionStocks = useMemo(() => {
+    if (!stockFilter) {
+      return sessionStocks;
+    }
+    return sessionStocks.filter(stock => 
+      stock.toLowerCase().includes(stockFilter.toLowerCase())
+    );
+  }, [sessionStocks, stockFilter]);
 
 
   return (
@@ -853,7 +850,7 @@ export function TradeWiseDashboard() {
                   <div className="px-4 mt-4">
                     <Popover>
                         <PopoverTrigger asChild>
-                          <Button disabled={isSuggesting || isPending} variant="outline" size="sm" className="w-full">
+                          <Button disabled={isSuggesting || isPending} variant="outline" size="sm" className="w-full" onClick={handleGetSuggestion}>
                               {isSuggesting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Thinking...</> : <><Lightbulb className="mr-2 h-4 w-4" /> Get Suggestion</>}
                           </Button>
                         </PopoverTrigger>
@@ -976,9 +973,9 @@ export function TradeWiseDashboard() {
                   <CardContent>
                       <div className="flex gap-2">
                           <Input 
-                              placeholder="e.g., TSLA" 
-                              value={newStockInput} 
-                              onChange={(e) => setNewStockInput(e.target.value)}
+                              placeholder="Filter stocks or add new..." 
+                              value={stockFilter} 
+                              onChange={(e) => setStockFilter(e.target.value)}
                               onKeyDown={(e) => e.key === 'Enter' && handleAddStock()}
                               className="uppercase"
                           />
@@ -994,8 +991,8 @@ export function TradeWiseDashboard() {
                       </div>
                       <ScrollArea className="h-40 mt-4">
                           <div className="space-y-2 pr-4">
-                              {sessionStocks.length > 0 ? (
-                                  sessionStocks.map(stock => (
+                              {filteredSessionStocks.length > 0 ? (
+                                  filteredSessionStocks.map(stock => (
                                       <div key={stock} className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
                                           <span className="font-medium">{stock}</span>
                                           <div className="flex items-center">
@@ -1010,7 +1007,7 @@ export function TradeWiseDashboard() {
                                   ))
                               ) : (
                                   <div className="flex items-center justify-center h-24 text-center text-muted-foreground">
-                                      No stocks added yet.
+                                      No stocks found.
                                   </div>
                               )}
                           </div>
