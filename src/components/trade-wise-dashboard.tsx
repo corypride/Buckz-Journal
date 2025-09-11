@@ -1,10 +1,12 @@
 
 "use client";
 
-import { useState, useMemo, useTransition } from "react";
+import { useState, useMemo, useTransition, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import * as xlsx from "xlsx";
+
 
 import { Button } from "@/components/ui/button";
 import {
@@ -77,6 +79,7 @@ import {
   Loader2,
   PlusCircle,
   Trash2,
+  Upload,
 } from "lucide-react";
 
 type Trade = {
@@ -146,6 +149,7 @@ export function TradeWiseDashboard() {
 
   const [sessionStocks, setSessionStocks] = useState<string[]>([]);
   const [newStockInput, setNewStockInput] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
 
   const portfolioValue = useMemo(() => {
@@ -385,6 +389,53 @@ export function TradeWiseDashboard() {
           form.setValue("stock", "");
       }
   };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const data = e.target?.result;
+            const workbook = xlsx.read(data, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const json = xlsx.utils.sheet_to_json<{ Asset?: string }>(worksheet);
+
+            const newStocks = json
+                .map(row => row.Asset?.trim().toUpperCase())
+                .filter((asset): asset is string => !!asset && !sessionStocks.includes(asset));
+
+            if (newStocks.length > 0) {
+                setSessionStocks(prev => [...new Set([...prev, ...newStocks])]);
+                toast({
+                    title: "Import Successful",
+                    description: `${newStocks.length} new stock(s) added to the session.`,
+                });
+            } else {
+                 toast({
+                    variant: "destructive",
+                    title: "No New Stocks Found",
+                    description: `The "Asset" column in your file may be empty or contain stocks already in your session.`,
+                });
+            }
+        } catch (error) {
+            console.error("Error parsing XLS file:", error);
+            toast({
+                variant: "destructive",
+                title: "Import Failed",
+                description: "Could not parse the file. Please ensure it's a valid XLS/XLSX file with an 'Asset' column.",
+            });
+        }
+    };
+    reader.readAsArrayBuffer(file);
+    
+    // Reset file input
+    if(fileInputRef.current) {
+        fileInputRef.current.value = "";
+    }
+};
 
   return (
     <div className="flex flex-col min-h-dvh bg-background text-foreground font-sans">
@@ -877,6 +928,14 @@ export function TradeWiseDashboard() {
                               className="uppercase"
                           />
                           <Button onClick={handleAddStock}><PlusCircle className="mr-2"/> Add</Button>
+                           <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="mr-2"/> Import</Button>
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                onChange={handleFileUpload}
+                                accept=".xlsx, .xls"
+                                className="hidden"
+                            />
                       </div>
                       <ScrollArea className="h-40 mt-4">
                           <div className="space-y-2 pr-4">
@@ -973,5 +1032,3 @@ export function TradeWiseDashboard() {
     </div>
   );
 }
-
-    
