@@ -4,7 +4,8 @@ import { useState, useMemo, useTransition, useRef, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import * as xlsx from "xlsx";
+import { parseExcelTrades } from "@/lib/excel-parser";
+import { parseCsvTrades } from "@/lib/csv-parser";
 
 
 import { Button } from "@/components/ui/button";
@@ -92,6 +93,14 @@ type Trade = {
   profit: number;
   portfolioAfter: number;
   tradeType: 'call' | 'put';
+  // Optional fields from PDF/Excel/CSV import
+  orderNumber?: string;
+  expiryTime?: string;
+  openTime?: string;
+  closeTime?: string;
+  openPrice?: number;
+  closePrice?: number;
+  currency?: string;
 };
 
 const tradeSchema = z.object({
@@ -421,51 +430,145 @@ export function TradeWiseDashboard() {
       }
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleTradeImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        try {
-            const data = e.target?.result;
-            const workbook = xlsx.read(data, { type: 'array' });
-            const sheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[sheetName];
-            const json = xlsx.utils.sheet_to_json<{ Asset?: string }>(worksheet);
+    const fileName = file.name.toLowerCase();
+    let parsedTrades: Array<{
+      direction: 'call' | 'put';
+      orderNumber: string;
+      expiryTime: string;
+      asset: string;
+      openTime: string;
+      closeTime: string;
+      openPrice: number;
+      closePrice: number;
+      tradeAmount: number;
+      profitAmount: number;
+      currency: string;
+    }> = [];
 
-            const newStocks = json
-                .map(row => row.Asset?.trim().toUpperCase())
-                .filter((asset): asset is string => !!asset && !sessionStocks.includes(asset));
+    try {
+      // Detect file type and use appropriate parser
+      if (fileName.endsWith('.pdf')) {
+        // Use API route for PDF parsing (server-side)
+        const formData = new FormData();
+        formData.append('file', file);
 
-            if (newStocks.length > 0) {
-                setSessionStocks(prev => [...new Set([...prev, ...newStocks])]);
-                toast({
-                    title: "Import Successful",
-                    description: `${newStocks.length} new stock(s) added to the session.`,
-                });
-            } else {
-                 toast({
-                    variant: "destructive",
-                    title: "No New Stocks Found",
-                    description: `The "Asset" column in your file may be empty or contain stocks already in your session.`,
-                });
-            }
-        } catch (error) {
-            console.error("Error parsing XLS file:", error);
-            toast({
-                variant: "destructive",
-                title: "Import Failed",
-                description: "Could not parse the file. Please ensure it's a valid XLS/XLSX file with an 'Asset' column.",
-            });
+        const response = await fetch('/api/parse-pdf', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to parse PDF');
         }
-    };
-    reader.readAsArrayBuffer(file);
-    
-    if(fileInputRef.current) {
-        fileInputRef.current.value = "";
+
+        const data = await response.json();
+        parsedTrades = data.trades || [];
+      } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+        const buffer = await file.arrayBuffer();
+        parsedTrades = await parseExcelTrades(Buffer.from(buffer));
+      } else if (fileName.endsWith('.csv')) {
+        const text = await file.text();
+        parsedTrades = parseCsvTrades(text);
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Unsupported File Type",
+          description: "Please upload a PDF, Excel (.xlsx, .xls), or CSV file.",
+        });
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+        return;
+      }
+
+      if (parsedTrades.length === 0) {
+        toast({
+          variant: "destructive",
+          title: "No Trades Found",
+          description: "Could not find any valid trades in the file. Please check the format.",
+        });
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+        return;
+      }
+
+      // Extract unique assets from trades and add to session stocks
+      const uniqueAssets = [...new Set(parsedTrades.map(t => t.asset))];
+      const newAssets = uniqueAssets.filter(asset => !sessionStocks.includes(asset));
+
+      // Calculate starting portfolio (use min open price * amount or default)
+      let startingPortfolio = initialPortfolio;
+      if (trades.length === 0 && parsedTrades.length > 0) {
+        // For first import, try to determine starting portfolio from trades
+        // Use the first trade's info as baseline
+        const firstTrade = parsedTrades[0];
+        startingPortfolio = Math.max(initialPortfolio, firstTrade.tradeAmount * 2);
+        setInitialPortfolio(startingPortfolio);
+      }
+
+      // Convert parsed trades to Trade type and calculate portfolio values
+      let currentPortfolio = startingPortfolio;
+      const newTrades: Trade[] = parsedTrades.map((parsed, index) => {
+        const outcome: "win" | "loss" = parsed.profitAmount >= 0 ? "win" : "loss";
+        const profit = parsed.profitAmount;
+        currentPortfolio += profit;
+
+        // Calculate return percentage from profit and amount
+        const returnPercentage = parsed.tradeAmount > 0
+          ? Math.abs((profit / parsed.tradeAmount) * 100)
+          : 0;
+
+        return {
+          id: trades.length + index + 1,
+          stock: parsed.asset,
+          amount: parsed.tradeAmount,
+          returnPercentage,
+          outcome,
+          profit,
+          portfolioAfter: currentPortfolio,
+          tradeType: parsed.direction,
+          orderNumber: parsed.orderNumber,
+          expiryTime: parsed.expiryTime,
+          openTime: parsed.openTime,
+          closeTime: parsed.closeTime,
+          openPrice: parsed.openPrice,
+          closePrice: parsed.closePrice,
+          currency: parsed.currency,
+        };
+      });
+
+      // Merge with existing trades
+      setTrades(prev => [...prev, ...newTrades]);
+
+      // Add new assets to session stocks
+      if (newAssets.length > 0) {
+        setSessionStocks(prev => [...new Set([...prev, ...newAssets])]);
+      }
+
+      toast({
+        title: "Import Successful",
+        description: `Imported ${parsedTrades.length} trade(s)${newAssets.length > 0 ? ` and ${newAssets.length} new asset(s)` : ''}.`,
+      });
+
+    } catch (error) {
+      console.error("Error importing trades:", error);
+      toast({
+        variant: "destructive",
+        title: "Import Failed",
+        description: error instanceof Error ? error.message : "Could not parse the file. Please check the format.",
+      });
     }
-};
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   const toggleFavorite = (stockToToggle: string) => {
     setFavoritedStocks(prev => 
@@ -972,20 +1075,20 @@ export function TradeWiseDashboard() {
                   </CardHeader>
                   <CardContent>
                       <div className="flex gap-2">
-                          <Input 
-                              placeholder="Filter stocks or add new..." 
-                              value={stockFilter} 
+                          <Input
+                              placeholder="Filter stocks or add new..."
+                              value={stockFilter}
                               onChange={(e) => setStockFilter(e.target.value)}
                               onKeyDown={(e) => e.key === 'Enter' && handleAddStock()}
                               className="uppercase"
                           />
                           <Button onClick={handleAddStock}><PlusCircle className="mr-2"/> Add</Button>
-                           <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="mr-2"/> Import</Button>
+                           <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="mr-2"/> Import Trades</Button>
                             <input
                                 type="file"
                                 ref={fileInputRef}
-                                onChange={handleFileUpload}
-                                accept=".xlsx, .xls"
+                                onChange={handleTradeImport}
+                                accept=".pdf, .xlsx, .xls, .csv"
                                 className="hidden"
                             />
                       </div>
@@ -1047,23 +1150,17 @@ export function TradeWiseDashboard() {
                                                   </Badge>
                                               </TableCell>
                                               <TableCell>
-                                                  <div className="flex flex-col">
-                                                    <div>
-                                                        <span className="text-primary">{p.calls.wins}</span> / <span className="text-destructive">{p.calls.losses}</span>
-                                                    </div>
-                                                    <div className="text-xs text-muted-foreground">
-                                                        {p.calls.wins + p.calls.losses > 0 ? formatPercent((p.calls.wins / (p.calls.wins + p.calls.losses)) * 100) : 'N/A'}
-                                                    </div>
+                                                  <div className="font-medium">
+                                                      {p.calls.wins + p.calls.losses > 0
+                                                          ? `${p.calls.wins}/${p.calls.wins + p.calls.losses} (${formatPercent((p.calls.wins / (p.calls.wins + p.calls.losses)) * 100)})`
+                                                          : 'N/A'}
                                                   </div>
                                               </TableCell>
                                               <TableCell>
-                                                   <div className="flex flex-col">
-                                                    <div>
-                                                        <span className="text-primary">{p.puts.wins}</span> / <span className="text-destructive">{p.puts.losses}</span>
-                                                    </div>
-                                                    <div className="text-xs text-muted-foreground">
-                                                        {p.puts.wins + p.puts.losses > 0 ? formatPercent((p.puts.wins / (p.puts.wins + p.puts.losses)) * 100) : 'N/A'}
-                                                    </div>
+                                                   <div className="font-medium">
+                                                      {p.puts.wins + p.puts.losses > 0
+                                                          ? `${p.puts.wins}/${p.puts.wins + p.puts.losses} (${formatPercent((p.puts.wins / (p.puts.wins + p.puts.losses)) * 100)})`
+                                                          : 'N/A'}
                                                   </div>
                                               </TableCell>
                                           </TableRow>
