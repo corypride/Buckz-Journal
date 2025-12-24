@@ -73,14 +73,9 @@ src/
 - Session statistics (portfolio value, win rate, potential payout)
 - Session reset functionality
 - AI-powered trade amount suggestions with bankruptcy risk alerts
-- File import/export for trade data (PDF, Excel, CSV)
+- File import/export for trade data (Excel, CSV)
 
 ## MVP Features Requiring Verification
 
 The following features are in MVP state and need testing/verification before being considered complete:
 
-### PDF Import ([src/app/api/parse-pdf/route.ts](src/app/api/parse-pdf/route.ts))
-- **Status:** Implemented but requires testing with real PDF files
-- **Implementation:** Uses `pdf-parse` v2.4.5 library with class-based API
-- **Supported Formats:** Pipe-separated, key-value pairs, CSV-like lines
-- **Action Needed:** Test with actual trading platform PDF exports to verify parsing works correctly

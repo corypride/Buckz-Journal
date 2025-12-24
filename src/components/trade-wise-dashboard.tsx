@@ -451,24 +451,7 @@ export function TradeWiseDashboard() {
 
     try {
       // Detect file type and use appropriate parser
-      if (fileName.endsWith('.pdf')) {
-        // Use API route for PDF parsing (server-side)
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const response = await fetch('/api/parse-pdf', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to parse PDF');
-        }
-
-        const data = await response.json();
-        parsedTrades = data.trades || [];
-      } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+      if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
         const buffer = await file.arrayBuffer();
         parsedTrades = await parseExcelTrades(Buffer.from(buffer));
       } else if (fileName.endsWith('.csv')) {
@@ -478,7 +461,7 @@ export function TradeWiseDashboard() {
         toast({
           variant: "destructive",
           title: "Unsupported File Type",
-          description: "Please upload a PDF, Excel (.xlsx, .xls), or CSV file.",
+          description: "Please upload an Excel (.xlsx, .xls) or CSV file.",
         });
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
