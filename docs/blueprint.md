@@ -1,4 +1,4 @@
-# **App Name**: TradeWise
+# **App Name**: Buckz-Journal
 
 ## Core Features:
 
