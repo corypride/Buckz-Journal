@@ -61,6 +61,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { suggestTradeAmount, SuggestTradeAmountOutput } from "@/ai/flows/suggest-trade-amount";
 import { Combobox } from "@/components/ui/combobox";
+import { TradePagination } from "@/components/trade-pagination";
 
 import {
   BookOpenCheck,
@@ -119,6 +120,9 @@ const DEFAULT_SESSION_GOAL = 10;
 const DEFAULT_PROFIT_GOAL = 100;
 const DEFAULT_PROFIT_GOAL_TYPE = "dollar";
 const DEFAULT_TARGET_WIN_RATE = 70;
+
+const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
+const DEFAULT_ITEMS_PER_PAGE = 10;
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("en-US", {
@@ -186,6 +190,10 @@ export function TradeWiseDashboard() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [favoritedStocks, setFavoritedStocks] = useState<string[]>([]);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_ITEMS_PER_PAGE);
+
 
   const portfolioValue = useMemo(() => {
     if (trades.length === 0) return initialPortfolio;
@@ -213,6 +221,20 @@ export function TradeWiseDashboard() {
     const tradeHistoryForAI = trades.map(t => ({ stock: t.stock, amount: t.amount, returnPercentage: t.returnPercentage, outcome: t.outcome, tradeType: t.tradeType })).reverse();
     return { wins, losses, winRate, totalProfit, tradeHistoryForAI };
   }, [trades]);
+
+  // Pagination computed values
+  const { paginatedTrades, totalPages, startIndex, endIndex } = useMemo(() => {
+    const reversedTrades = [...trades].reverse();
+    const totalTrades = trades.length;
+    if (totalTrades === 0) {
+      return { paginatedTrades: [], totalPages: 1, startIndex: 0, endIndex: 0 };
+    }
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = Math.min(startIndex + itemsPerPage, totalTrades);
+    const paginatedTrades = reversedTrades.slice(startIndex, endIndex);
+    const totalPages = Math.ceil(totalTrades / itemsPerPage);
+    return { paginatedTrades, totalPages, startIndex, endIndex };
+  }, [trades, currentPage, itemsPerPage]);
 
   const stockPerformance = useMemo(() => {
     const performance: {
@@ -276,6 +298,11 @@ export function TradeWiseDashboard() {
     }
   };
 
+  const handlePageChange = (newPage: number) => {
+    const validPage = Math.max(1, Math.min(newPage, totalPages));
+    setCurrentPage(validPage);
+  };
+
   useEffect(() => {
     if (trades.length === 1) {
       handleGetSuggestion();
@@ -308,6 +335,7 @@ export function TradeWiseDashboard() {
 
       setTrades((prev) => [...prev, newTrade]);
       setSuggestion(null);
+      setCurrentPage(1);
     });
   };
   
@@ -399,6 +427,8 @@ export function TradeWiseDashboard() {
       setSuggestion(null);
       setRiskLevel("medium");
       setFavoritedStocks([]);
+      setCurrentPage(1);
+      setItemsPerPage(DEFAULT_ITEMS_PER_PAGE);
     });
   };
 
@@ -528,6 +558,7 @@ export function TradeWiseDashboard() {
 
       // Merge with existing trades
       setTrades(prev => [...prev, ...newTrades]);
+      setCurrentPage(1);
 
       // Add new assets to session stocks
       if (newAssets.length > 0) {
@@ -993,7 +1024,7 @@ export function TradeWiseDashboard() {
                         </TableHeader>
                         <TableBody>
                           {trades.length > 0 ? (
-                            [...trades].reverse().map((trade) => (
+                            paginatedTrades.map((trade) => (
                               <TableRow key={trade.id}>
                                 <TableCell className="font-medium">
                                   #{trade.id}
@@ -1045,6 +1076,24 @@ export function TradeWiseDashboard() {
                       </Table>
                     </div>
                   </ScrollArea>
+
+                  {/* Pagination Controls */}
+                  <div className="flex items-center justify-between px-4 pt-4 border-t border-white/10">
+                    <TradePagination
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      itemsPerPage={itemsPerPage}
+                      itemsPerPageOptions={ITEMS_PER_PAGE_OPTIONS}
+                      startIndex={startIndex}
+                      endIndex={endIndex}
+                      totalItems={trades.length}
+                      onPageChange={handlePageChange}
+                      onItemsPerPageChange={(items) => {
+                        setItemsPerPage(items);
+                        setCurrentPage(1);
+                      }}
+                    />
+                  </div>
                 </CardContent>
               </Card>
 
