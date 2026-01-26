@@ -2,6 +2,22 @@
 
 Bucks Bible is a Next.js 15 trading risk management tool with AI-powered trade amount suggestions using Genkit and Google AI (Gemini 2.0 Flash).
 
+## Getting Started
+
+First, install the dependencies:
+
+```bash
+npm install
+```
+
+Then, start the development server:
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:9002](http://localhost:9002) in your browser to see the application.
+
 ## Development Commands
 
 | Command | Description |
